@@ -26,3 +26,32 @@ export interface IQuotaHistoryEntry {
   recordedAt: number
   source: 'auto' | 'manual'
 }
+
+// === 额度源类型（独立于 API Key）===
+
+export enum QuotaSourceType {
+  OPENCODE_GO = 'opencode-go',
+  BAILIAN = 'bailian',
+  DEEPSEEK = 'deepseek',
+  MOONSHOT = 'moonshot',
+  GROQ = 'groq',
+  QWEN = 'qwen',
+  GLM = 'glm',
+  MINIMAX = 'minimax',
+}
+
+export interface IQuotaSourceEntity {
+  _id: string
+  _rev?: string
+  type: 'quota-source'
+  sourceType: QuotaSourceType
+  label: string
+  encryptedCredential: string
+  credentialHint: string
+  baseUrl?: string
+  config?: Record<string, any>
+  enabled: boolean
+  sortOrder: number
+  createdAt: number
+  updatedAt: number
+}

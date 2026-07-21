@@ -1,6 +1,7 @@
 export const COLLECTION = {
   API_KEY: 'apikey/',
   SETTING: 'setting/',
+  QUOTA_SOURCE: 'quota-source/',
 }
 
 export function docId(collection: string, ...parts: string[]): string {
