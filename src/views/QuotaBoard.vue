@@ -15,8 +15,8 @@ const router = useRouter()
 const quotasStore = useQuotasStore()
 const quotaSourcesStore = useQuotaSourcesStore()
 
-onMounted(() => {
-  quotaSourcesStore.fetchAll()
+onMounted(async () => {
+  await quotaSourcesStore.fetchAll()
   autoRefreshScheduler.start()
 })
 
