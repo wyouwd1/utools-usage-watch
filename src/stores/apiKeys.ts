@@ -29,15 +29,10 @@ export const useApiKeysStore = defineStore('apiKeys', () => {
     }
   }
 
-  function addKey(data: Omit<IApiKeyEntity, '_id' | '_rev' | 'createdAt' | 'updatedAt'>): IApiKeyEntity | null {
+  async function addKey(data: Omit<IApiKeyEntity, '_id' | '_rev' | 'type' | 'encryptedKey' | 'keyPreview' | 'createdAt' | 'updatedAt'> & { key: string }): Promise<IApiKeyEntity | null> {
     try {
-      const now = Date.now()
-      const key = apiKeysRepo.add({
-        ...data,
-        createdAt: now,
-        updatedAt: now,
-      })
-      if (key) apiKeyList.value.push(key)
+      const key = await apiKeysRepo.add(data)
+      apiKeyList.value.push(key)
       return key
     } catch (e) {
       error.value = (e as Error).message

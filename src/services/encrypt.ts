@@ -6,7 +6,7 @@ async function getOrCreateKey(): Promise<CryptoKey> {
   const stored = settingsRepo.get('encryption-key')
   if (stored) {
     const keyData = base64ToBytes(stored)
-    return crypto.subtle.importKey('raw', keyData, ALGORITHM, false, ['encrypt', 'decrypt'])
+    return crypto.subtle.importKey('raw', keyData as unknown as ArrayBuffer, ALGORITHM, false, ['encrypt', 'decrypt'])
   }
 
   // Generate new key
