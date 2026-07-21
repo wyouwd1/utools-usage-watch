@@ -69,6 +69,10 @@ function goToSourceDetail(sourceId: string) {
   router.push(`/quota/${sourceId}`)
 }
 
+function goToEditSource(sourceId: string) {
+  router.push(`/quota-source/${sourceId}`)
+}
+
 function goToAddSource() {
   router.push('/quota-source/new')
 }
@@ -185,8 +189,15 @@ function getCacheEntry(sourceId: string) {
 	        <div class="flex items-center justify-between mb-3">
 	          <div class="flex items-center gap-2 min-w-0">
 	            <span class="text-xl" :title="source.sourceType">{{ sourceIcon(source.sourceType) }}</span>
-	            <span class="text-sm font-medium text-gray-800 truncate">{{ source.label }}</span>
-	            <span v-if="isExpired(source)" class="text-amber-500 text-xs" title="凭证已过期">⚠️</span>
+          <span class="text-sm font-medium text-gray-800 truncate">{{ source.label }}</span>
+            <span v-if="isExpired(source)" class="text-amber-500 text-xs" title="凭证已过期">⚠️</span>
+            <button
+              @click.stop="goToEditSource(source._id.replace('quota-source/', ''))"
+              class="ml-1 text-gray-300 hover:text-gray-600 transition-colors text-xs"
+              :title="t('common.edit')"
+            >
+              ✏️
+            </button>
 	          </div>
           <span
             v-if="source.enabled"
