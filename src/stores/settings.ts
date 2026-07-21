@@ -42,5 +42,27 @@ export const useSettingsStore = defineStore('settings', () => {
     } catch { /* silently fail */ }
   }
 
-  return { settings, loaded, load, save, reset }
+  /**
+   * Ensure default settings exist in the database.
+   * This is called on app startup to migrate users who may not have settings persisted yet.
+   */
+  function migrate(): void {
+    try {
+      const stored = settingsRepo.getAll()
+      const hasLanguage = stored.language != null
+      const hasRefreshInterval = stored.refreshInterval != null
+      const hasThreshold = stored.defaultAlertThreshold != null
+
+      if (!hasLanguage) settingsRepo.set('language', DEFAULT_SETTINGS.language)
+      if (!hasRefreshInterval) settingsRepo.set('refreshInterval', DEFAULT_SETTINGS.refreshInterval)
+      if (!hasThreshold) settingsRepo.set('defaultAlertThreshold', DEFAULT_SETTINGS.defaultAlertThreshold)
+
+      // If any defaults were written, reload
+      if (!hasLanguage || !hasRefreshInterval || !hasThreshold) {
+        load()
+      }
+    } catch { /* silently fail */ }
+  }
+
+  return { settings, loaded, load, save, reset, migrate }
 })

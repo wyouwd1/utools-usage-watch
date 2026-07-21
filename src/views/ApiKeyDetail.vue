@@ -291,7 +291,7 @@ async function handleSave() {
           </button>
         </div>
         <p v-if="keyHint" class="mt-1 text-xs text-gray-400">{{ keyHint }}</p>
-        <p v-if="!isNew" class="mt-1 text-xs text-gray-400">Leave empty to keep the existing key</p>
+        <p v-if="!isNew" class="mt-1 text-xs text-gray-400">{{ t('apiKeys.keepExistingKey') }}</p>
       </div>
 
       <!-- Base URL input -->
@@ -325,7 +325,7 @@ async function handleSave() {
           <input
             v-model="modelsInput"
             type="text"
-            placeholder="e.g. gpt-4"
+            :placeholder="t('apiKeys.placeholder.model')"
             class="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             @keydown.enter.prevent="addModel"
           />

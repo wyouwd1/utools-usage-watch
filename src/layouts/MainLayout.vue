@@ -2,13 +2,29 @@
 import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
 import { computed } from 'vue'
+import { useSettingsStore } from '@/stores/settings'
 
 const { t, locale } = useI18n()
 const router = useRouter()
 const route = useRoute()
+const settingsStore = useSettingsStore()
+
+// Sync locale from settings store on mount
+if (settingsStore.loaded) {
+  locale.value = settingsStore.settings.language
+} else {
+  settingsStore.load()
+  if (settingsStore.loaded) {
+    locale.value = settingsStore.settings.language
+  }
+}
+// Also run migration to ensure defaults
+settingsStore.migrate()
 
 const toggleLang = () => {
-  locale.value = locale.value === 'zh-CN' ? 'en-US' : 'zh-CN'
+  const newLang = locale.value === 'zh-CN' ? 'en-US' : 'zh-CN'
+  locale.value = newLang
+  settingsStore.save('language', newLang)
 }
 
 const navItems = computed(() => [

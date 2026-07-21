@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   usedPercent: number | null
@@ -58,7 +61,7 @@ const countdown = computed(() => {
       <div v-else class="h-full rounded-full bg-gray-200 animate-pulse" style="width: 100%" />
     </div>
     <div v-if="!compact && countdown" class="text-xs text-gray-400 mt-1">
-      {{ countdown }} 后重置 / resets in {{ countdown }}
+      {{ t('quota.resetsInTime', { time: countdown }) }}
     </div>
   </div>
 </template>

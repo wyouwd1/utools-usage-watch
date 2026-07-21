@@ -57,12 +57,12 @@ function formatTime(ts: number | null): string {
   const now = new Date()
   const diff = now.getTime() - d.getTime()
   const minutes = Math.floor(diff / 60000)
-  if (minutes < 1) return t('common.loading').replace('...', ' just now')
-  if (minutes < 60) return `${minutes}m ago`
+  if (minutes < 1) return t('common.timeJustNow')
+  if (minutes < 60) return t('common.timeMinutesAgo', { n: minutes })
   const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
+  if (hours < 24) return t('common.timeHoursAgo', { n: hours })
   const days = Math.floor(hours / 24)
-  return `${days}d ago`
+  return t('common.timeDaysAgo', { n: days })
 }
 
 function handleDelete(id: string) {

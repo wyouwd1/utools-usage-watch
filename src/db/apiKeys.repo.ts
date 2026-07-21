@@ -73,3 +73,21 @@ export function search(query: string): IApiKeyEntity[] {
     (k) => k.label.toLowerCase().includes(lower) || k.provider.toLowerCase().includes(lower),
   )
 }
+
+/**
+ * Import a pre-built API key entity directly (used for data import/restore).
+ * The document must have a valid _id (created via docId + UUID).
+ */
+export function importEntity(doc: IApiKeyEntity): IApiKeyEntity {
+  return putDoc(doc)
+}
+
+/**
+ * Delete all API keys from the database (used before importing a full backup).
+ */
+export function clearAll(): void {
+  const all = getAll()
+  for (const key of all) {
+    removeDoc(key._id)
+  }
+}
