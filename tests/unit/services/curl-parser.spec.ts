@@ -216,6 +216,31 @@ describe('parseCurl', () => {
     expect(result.baseUrl).toBe('ftp://files.example.com')
   })
 
+  it('parses cookie from -b flag (curl --cookie shorthand)', () => {
+    const result = parseCurl(
+      `curl 'https://opencode.ai/workspace/wrk_123/go' -H 'accept: text/html' -b 'auth=Fe26.2**abc*def; oc_locale=zh'`,
+    )
+
+    expect(isCurlParseError(result)).toBe(false)
+    if (isCurlParseError(result)) return
+
+    expect(result.baseUrl).toBe('https://opencode.ai')
+    expect(result.workspaceId).toBe('wrk_123')
+    expect(result.cookies.auth).toBe('Fe26.2**abc*def')
+    expect(result.cookies.oc_locale).toBe('zh')
+  })
+
+  it('parses cookie from --cookie flag', () => {
+    const result = parseCurl(
+      `curl 'https://opencode.ai/api' --cookie 'session=xyz123'`,
+    )
+
+    expect(isCurlParseError(result)).toBe(false)
+    if (isCurlParseError(result)) return
+
+    expect(result.cookies.session).toBe('xyz123')
+  })
+
   it('allows Authorization header as valid credential instead of Cookie', () => {
     const result = parseCurl("curl 'https://api.example.com/secure' -H 'Authorization: Bearer sk-xxx'")
 

@@ -111,7 +111,19 @@ export function parseCurl(curl: string): CurlParseResult | CurlParseError {
   const headers = extractAllHeaders(trimmed)
 
   // Extract cookies from the Cookie header (case-insensitive)
-  const cookieHeaderValue = findHeader(headers, 'Cookie')
+  let cookieHeaderValue = findHeader(headers, 'Cookie')
+
+  // If no Cookie header, try -b / --cookie flag
+  if (!cookieHeaderValue) {
+    const bMatch = trimmed.match(/(?:^|\s)-b\s+['"]([^'"]+)['"]/)
+    if (!bMatch) {
+      const cookieFlagMatch = trimmed.match(/(?:^|\s)--cookie\s+['"]([^'"]+)['"]/)
+      if (cookieFlagMatch) cookieHeaderValue = cookieFlagMatch[1]
+    } else {
+      cookieHeaderValue = bMatch[1]
+    }
+  }
+
   const cookies = cookieHeaderValue ? parseCookieString(cookieHeaderValue) : {}
 
   // Check for credentials (Cookie or Authorization header)
