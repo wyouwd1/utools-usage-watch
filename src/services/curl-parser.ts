@@ -1,4 +1,4 @@
-import type { CurlParseResult, CurlParseError } from '@/types/quota'
+import type { CurlParseResult, CurlParseError, CurlRequest } from '@/types/quota'
 
 const ERROR_MESSAGES: Record<CurlParseError['code'], { zh: string; en: string }> = {
   NO_URL: {
@@ -158,4 +158,68 @@ export function parseCurl(curl: string): CurlParseResult | CurlParseError {
     workspaceId,
     secToken,
   }
+}
+
+/**
+ * Parse a cURL command into a fetch-ready CurlRequest.
+ * Unlike parseCurl(), this:
+ * - Extracts HTTP method (-X/--request) and body (--data/-d/--data-raw)
+ * - Does NOT require credentials (no NO_CREDENTIAL check)
+ */
+export function parseCurlToRequest(curl: string): CurlRequest | CurlParseError {
+  const trimmed = curl.trim()
+  if (!trimmed) {
+    return createError('NO_URL', 'Empty cURL command')
+  }
+  if (!/^curl\s/i.test(trimmed)) {
+    return createError('INVALID_FORMAT', 'cURL command must start with "curl "')
+  }
+
+  // Extract URL: find the first http:// or https:// URL in the command
+  const urlMatch = trimmed.match(/https?:\/\/[^\s'"]+/)
+  if (!urlMatch) {
+    return createError('INVALID_FORMAT', 'Cannot extract URL from cURL command')
+  }
+  let url = urlMatch[0].replace(/\/$/, '')
+
+  // Extract method: -X POST, --request POST
+  let method = 'GET'
+  const methodMatch = trimmed.match(/(?:^|\s)-(?:X|-request)\s+['"]?([A-Z]+)['"]?/)
+  if (methodMatch) method = methodMatch[1].toUpperCase()
+
+  // Extract all -H headers
+  const headers = extractAllHeaders(trimmed)
+
+  // Extract cookies from -b / --cookie flag or Cookie header
+  let cookieHeaderValue = findHeader(headers, 'Cookie')
+  if (!cookieHeaderValue) {
+    const bMatch = trimmed.match(/(?:^|\s)-b\s+['"]([^'"]+)['"]/)
+    if (!bMatch) {
+      const cookieFlagMatch = trimmed.match(/(?:^|\s)--cookie\s+['"]([^'"]+)['"]/)
+      if (cookieFlagMatch) cookieHeaderValue = cookieFlagMatch[1]
+    } else {
+      cookieHeaderValue = bMatch[1]
+    }
+  }
+
+  // If we found a cookie header from -b, add it to headers
+  if (cookieHeaderValue && !findHeader(headers, 'Cookie')) {
+    headers['Cookie'] = cookieHeaderValue
+  }
+
+  // Extract request body: --data, -d, --data-raw, --data-binary
+  let body: string | undefined
+  // Match -d or --data (including --data-raw, --data-binary)
+  const DATA_RE = /(?:^|\s)-{1,2}(?:d|data(?:-raw|-binary)?)\s+/
+  const dataStart = trimmed.match(DATA_RE)
+  if (dataStart) {
+    const after = trimmed.slice(dataStart.index! + dataStart[0].length)
+    const quote = after[0]
+    if (quote === "'" || quote === '"') {
+      const endIdx = after.indexOf(quote, 1)
+      if (endIdx > 1) body = after.slice(1, endIdx)
+    }
+  }
+
+  return { url, method, headers, body }
 }

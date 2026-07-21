@@ -78,7 +78,7 @@ export default {
     refreshing: 'Refreshing...',
     rolling: 'Rolling (5h)',
     weekly: 'Weekly (7d)',
-    monthly: 'Monthly',
+    monthly: 'Monthly (mo)',
     used: 'Used',
     total: 'Total',
     remaining: 'Remaining',

@@ -77,6 +77,14 @@ function goToAddSource() {
   router.push('/quota-source/new')
 }
 
+function getWindowsList(sourceId: string): { key: string; usedPercent: number; resetsAt: number | null }[] {
+  const entry = quotasStore.quotaMap[`source:${sourceId}`]
+  if (!entry) return []
+  return Object.entries(entry.windows)
+    .filter(([, w]) => w != null)
+    .map(([key, w]) => ({ key, usedPercent: w!.usedPercent, resetsAt: w!.resetsAt }))
+}
+
 function getCacheEntry(sourceId: string) {
   return quotasStore.quotaMap[`source:${sourceId}`]
 }
@@ -181,33 +189,26 @@ function getCacheEntry(sourceId: string) {
 		      <div
 		        v-for="source in quotaSourcesStore.sourceList"
 		        :key="source._id"
-		        @click="goToSourceDetail(source._id.replace('quota-source/', ''))"
-		        class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md hover:border-gray-200 transition-all cursor-pointer"
+		        @click="goToEditSource(source._id.replace('quota-source/', ''))"
+		        class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-lg hover:border-gray-200 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer"
 		        :class="{ 'opacity-60': isExpired(source) }"
 		      >
 		        <!-- Card header -->
-		        <div class="flex items-center justify-between mb-2">
-		          <div class="flex items-center gap-1.5 min-w-0">
-		            <span class="text-base" :title="source.sourceType">{{ sourceIcon(source.sourceType) }}</span>
-	          <span class="text-sm font-medium text-gray-800 truncate">{{ source.label }}</span>
+		        <div class="flex items-center justify-between mb-3">
+		          <div class="flex items-center gap-2 min-w-0">
+		            <span class="w-7 h-7 flex items-center justify-center rounded-lg bg-gray-50 text-sm shrink-0" :title="source.sourceType">{{ sourceIcon(source.sourceType) }}</span>
+	          <span class="text-sm font-semibold text-gray-800 truncate">{{ source.label }}</span>
 	            <span v-if="isExpired(source)" class="text-amber-500 text-xs" title="凭证已过期">⚠️</span>
-	            <button
-	              @click.stop="goToEditSource(source._id.replace('quota-source/', ''))"
-	              class="text-gray-300 hover:text-gray-600 transition-colors text-xs"
-	              :title="t('common.edit')"
-	            >
-	              ✏️
-	            </button>
 		          </div>
 	          <span
 	            v-if="source.enabled"
-	            class="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium"
+	            class="text-[11px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full font-medium leading-relaxed"
 	          >
 	            {{ t('quotaSources.enabled') }}
 	          </span>
 	          <span
 	            v-else
-	            class="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-medium"
+	            class="text-[11px] bg-gray-50 text-gray-400 px-2 py-0.5 rounded-full font-medium leading-relaxed"
 	          >
 	            {{ t('common.disabled') }}
 	          </span>
@@ -222,19 +223,17 @@ function getCacheEntry(sourceId: string) {
 	          <span>{{ t('common.stale') }}</span>
 	        </div>
 	
-	        <!-- Quota gauges (cc-hud style compact) -->
+	        	        <!-- Quota gauges — cc-hud one-line: "5h:20% (56m) │ 7d:26% (5.6d) │ mo:57% (22.6d)" -->
 	        <template v-if="getCacheEntry(source._id.replace('quota-source/', ''))">
-	          <div class="space-y-1.5">
-	            <template
-	              v-for="(win, winKey) in getCacheEntry(source._id.replace('quota-source/', ''))!.windows"
-	              :key="winKey"
-	            >
+	          <div class="flex items-center gap-0 text-xs">
+	            <template v-for="(win, idx) in getWindowsList(source._id.replace('quota-source/', ''))" :key="win.key">
+	              <span v-if="idx > 0" class="text-gray-300 mx-1 select-none">│</span>
 	              <QuotaGauge
-	                v-if="win"
 	                :used-percent="win.usedPercent"
-	                :label="t(`quota.${winKey}`)"
+	                :label="t(`quota.${win.key}`)"
 	                :resets-at="win.resetsAt"
 	                compact
+	                hide-bar
 	              />
 	            </template>
 	          </div>

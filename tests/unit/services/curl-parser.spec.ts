@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseCurl } from '@/services/curl-parser'
+import { parseCurl, parseCurlToRequest } from '@/services/curl-parser'
 import { isCurlParseError } from '@/types/quota'
 
 describe('parseCurl', () => {
@@ -252,7 +252,7 @@ describe('parseCurl', () => {
     expect(result.headers.Authorization).toBe('Bearer sk-xxx')
   })
 
-  it('uses double-quoted headers', () => {
+	  it('uses double-quoted headers', () => {
     const result = parseCurl(
       'curl "https://api.example.com/data" -H "Cookie: session=abc" -H "sec_token: t1"',
     )
@@ -262,5 +262,71 @@ describe('parseCurl', () => {
 
     expect(result.cookies).toEqual({ session: 'abc' })
     expect(result.secToken).toBe('t1')
+  })
+})
+
+describe('parseCurlToRequest', () => {
+  it('parses simple GET curl', () => {
+    const result = parseCurlToRequest(`curl 'https://api.example.com/data'`)
+    expect(isCurlParseError(result)).toBe(false)
+    if (isCurlParseError(result)) return
+    expect(result.url).toBe('https://api.example.com/data')
+    expect(result.method).toBe('GET')
+    expect(result.headers).toEqual({})
+    expect(result.body).toBeUndefined()
+  })
+
+  it('parses GET with headers', () => {
+    const result = parseCurlToRequest(
+      `curl 'https://api.example.com/data' -H 'accept: application/json' -H 'authorization: Bearer tok_xxx'`,
+    )
+    if (isCurlParseError(result)) return
+    expect(result.method).toBe('GET')
+    expect(result.headers['accept']).toBe('application/json')
+    expect(result.headers['authorization']).toBe('Bearer tok_xxx')
+  })
+
+  it('parses POST with -X flag and --data body', () => {
+    const result = parseCurlToRequest(
+      `curl -X POST 'https://api.example.com/create' -H 'content-type: application/json' --data '{"name":"test"}'`,
+    )
+    if (isCurlParseError(result)) return
+    expect(result.url).toBe('https://api.example.com/create')
+    expect(result.method).toBe('POST')
+    expect(result.body).toBe('{"name":"test"}')
+  })
+
+  it('parses POST with -d flag', () => {
+    const result = parseCurlToRequest(
+      `curl -d 'key=value' -X POST 'https://api.example.com/form'`,
+    )
+    if (isCurlParseError(result)) return
+    expect(result.method).toBe('POST')
+    expect(result.body).toBe('key=value')
+  })
+
+  it('handles -b cookie and adds to headers', () => {
+    const result = parseCurlToRequest(
+      `curl 'https://opencode.ai/workspace/wrk_test/go' -b 'auth=Fe26.2**token; oc_locale=zh'`,
+    )
+    if (isCurlParseError(result)) return
+    expect(result.headers['Cookie']).toBe('auth=Fe26.2**token; oc_locale=zh')
+  })
+
+  it('does NOT require credentials (unlike parseCurl)', () => {
+    const result = parseCurlToRequest(`curl 'https://api.example.com/public'`)
+    expect(isCurlParseError(result)).toBe(false)
+  })
+
+  it('returns error for empty input', () => {
+    const result = parseCurlToRequest('')
+    expect(isCurlParseError(result)).toBe(true)
+    if (isCurlParseError(result)) expect(result.code).toBe('NO_URL')
+  })
+
+  it('returns error for non-curl input', () => {
+    const result = parseCurlToRequest('wget https://example.com')
+    expect(isCurlParseError(result)).toBe(true)
+    if (isCurlParseError(result)) expect(result.code).toBe('INVALID_FORMAT')
   })
 })

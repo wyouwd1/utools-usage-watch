@@ -29,7 +29,18 @@ if (isH5Dev) {
 
     // Only proxy http/https URLs (skip relative URLs, data: URIs, etc.)
     if (urlStr.startsWith('http://') || urlStr.startsWith('https://')) {
-      return originalFetch(proxyBase + encodeURIComponent(urlStr), init)
+      // Browser strips Cookie header from fetch() — pass it through a custom header
+      // so the Vite CORS proxy can reconstruct it when forwarding to the target.
+      let modifiedInit = init
+      if (init?.headers) {
+        const headers = new Headers(init.headers)
+        if (headers.has('Cookie')) {
+          headers.set('x-forwarded-cookie', headers.get('Cookie')!)
+          headers.delete('Cookie')
+          modifiedInit = { ...init, headers }
+        }
+      }
+      return originalFetch(proxyBase + encodeURIComponent(urlStr), modifiedInit)
     }
     return originalFetch(input, init)
   }

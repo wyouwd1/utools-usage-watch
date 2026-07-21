@@ -78,7 +78,7 @@ export default {
     refreshing: '刷新中...',
     rolling: '滚动窗口 (5h)',
     weekly: '每周窗口 (7d)',
-    monthly: '每月窗口',
+    monthly: '每月窗口 (mo)',
     used: '已用',
     total: '总量',
     remaining: '剩余',

@@ -74,7 +74,7 @@ pnpm pack-upx
 | 图表 | Chart.js |
 | i18n | vue-i18n（中/英） |
 | 构建 | Vite |
-| 测试 | Vitest（91+ tests） |
+| 测试 | Vitest（192 tests） |
 
 ## 项目结构
 

@@ -78,3 +78,13 @@ export interface CurlParseError {
 export function isCurlParseError(obj: any): obj is CurlParseError {
   return obj && typeof obj === 'object' && 'code' in obj && 'userMessage' in obj
 }
+
+/**
+ * Parsed cURL request suitable for direct execution via fetch().
+ */
+export interface CurlRequest {
+  url: string
+  method: string
+  headers: Record<string, string>
+  body?: string
+}

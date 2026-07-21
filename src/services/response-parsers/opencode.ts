@@ -30,20 +30,30 @@ function parseChineseDuration(text: string): number | null {
  * 2. Legacy inline JS assignments
  */
 export function parseOpenCodeHtml(html: string): IQuotaWindows | null {
+  // Log debug info for troubleshooting
+  console.log('[OpenCodeParser] HTML length:', html.length)
+  console.log('[OpenCodeParser] First 300 chars:', html.substring(0, 300))
+  console.log('[OpenCodeParser] Has usage-value:', /data-slot="usage-value"/.test(html))
+  console.log('[OpenCodeParser] Has reset-time:', /data-slot="reset-time"/.test(html))
+  console.log('[OpenCodeParser] Has rollingUsage:', /rollingUsage/.test(html))
+  console.log('[OpenCodeParser] Status check (401/403/302):', /401|403|302|login/.test(html))
+
   // Try DOM-based parsing first
   const domResult = extractFromDom(html)
   if (domResult) return domResult
+  console.log('[OpenCodeParser] DOM parsing failed, trying JS assignments')
   // Fallback: legacy JS assignments
   return extractFromJsAssignments(html)
 }
 
 function extractFromDom(html: string): IQuotaWindows | null {
   const pctMatches: number[] = []
-  const pctRegex = /data-slot="usage-value"[^>]*>[\s\S]*?(\d+)\s*%/g
+  const pctRegex = /data-slot="usage-value"[^>]*>[\s\S]*?(\d+(?:\.\d+)?)\s*%/g
   let m: RegExpExecArray | null
   while ((m = pctRegex.exec(html)) !== null) {
     pctMatches.push(Number(m[1]))
   }
+  console.log('[OpenCodeParser] pctMatches:', JSON.stringify(pctMatches))
   if (pctMatches.length < 3) return null
 
   const timeTexts: string[] = []
@@ -72,7 +82,7 @@ function extractFromDom(html: string): IQuotaWindows | null {
 }
 
 function extractFromJsAssignments(html: string): IQuotaWindows | null {
-  const OBJECT_RE = /\{status:"[^"]+",resetInSec:(\d+),usagePercent:(\d+)\}/
+  const OBJECT_RE = /\{status:"[^"]+",resetInSec:(\d+),usagePercent:([\d.]+)\}/
 
   function extract(keyword: string): [number, number] | null {
     let pos = 0

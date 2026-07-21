@@ -44,9 +44,12 @@ function corsProxyPlugin(): Plugin {
               ...(req.headers['accept']
                 ? { accept: req.headers['accept'] as string }
                 : {}),
-              ...(req.headers['cookie']
-                ? { cookie: req.headers['cookie'] as string }
-                : {}),
+              // Browser strips Cookie from fetch(); H5 dev mode passes it as x-forwarded-cookie
+              ...(req.headers['x-forwarded-cookie']
+                ? { cookie: req.headers['x-forwarded-cookie'] as string }
+                : req.headers['cookie']
+                  ? { cookie: req.headers['cookie'] as string }
+                  : {}),
               ...(req.headers['user-agent']
                 ? { 'user-agent': req.headers['user-agent'] as string }
                 : { 'user-agent': 'utools-usage-watch/1.0' }),
