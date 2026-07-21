@@ -7,6 +7,7 @@ import { useQuotasStore } from '@/stores/quotas'
 import { checkSingleSource, forceRefreshSource } from '@/services/quota-checker'
 import QuotaGauge from '@/components/QuotaGauge.vue'
 import QuotaTrendChart from '@/components/QuotaTrendChart.vue'
+import CredentialExpiredBanner from '@/components/CredentialExpiredBanner.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -113,41 +114,49 @@ const monthlyInfo = computed(() => formatWindow(windows.value.monthly))
 
     <!-- Detail content -->
     <template v-else>
-      <!-- Source info header -->
-      <div class="flex items-center justify-between mb-6">
-        <div class="flex items-center gap-3">
-          <span class="text-3xl" :title="source.sourceType">{{ sourceIcon(source.sourceType) }}</span>
-          <div>
-            <h1 class="text-2xl font-bold text-gray-800">{{ source.label }}</h1>
-            <p class="text-sm text-gray-400 mt-0.5">{{ source.credentialHint }}</p>
-            <span
-              v-if="source.enabled"
-              class="inline-block mt-1 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium"
-            >
-              {{ t('quotaSources.enabled') }}
-            </span>
-            <span
-              v-else
-              class="inline-block mt-1 text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium"
-            >
-              {{ t('common.disabled') }}
-            </span>
-          </div>
-        </div>
-        <button
-          @click="handleRefresh"
-          :disabled="refreshing"
-          class="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          <svg v-if="refreshing" class="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-          <span>{{ refreshing ? t('quota.refreshing') : t('common.refresh') }}</span>
-        </button>
-      </div>
+	      <!-- Source info header -->
+	      <div class="flex items-center justify-between mb-6">
+	        <div class="flex items-center gap-3">
+	          <span class="text-3xl" :title="source.sourceType">{{ sourceIcon(source.sourceType) }}</span>
+	          <div>
+	            <h1 class="text-2xl font-bold text-gray-800">{{ source.label }}</h1>
+	            <p class="text-sm text-gray-400 mt-0.5">{{ source.credentialHint }}</p>
+	            <span
+	              v-if="source.enabled"
+	              class="inline-block mt-1 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium"
+	            >
+	              {{ t('quotaSources.enabled') }}
+	            </span>
+	            <span
+	              v-else
+	              class="inline-block mt-1 text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium"
+	            >
+	              {{ t('common.disabled') }}
+	            </span>
+	          </div>
+	        </div>
+	        <button
+	          @click="handleRefresh"
+	          :disabled="refreshing"
+	          class="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+	        >
+	          <svg v-if="refreshing" class="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+	            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+	            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+	          </svg>
+	          <span>{{ refreshing ? t('quota.refreshing') : t('common.refresh') }}</span>
+	        </button>
+	      </div>
 
-      <!-- Quota windows -->
+	      <!-- Expired credential banner -->
+	      <CredentialExpiredBanner
+	        v-if="source.lastCheckSucceeded === false"
+	        :source-id="sourceId"
+	        :label="source.label"
+	        :last-error="source.lastError"
+	      />
+
+	      <!-- Quota windows -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <!-- Rolling window -->
         <div v-if="rollingInfo" class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">

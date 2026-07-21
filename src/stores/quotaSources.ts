@@ -89,15 +89,43 @@ export const useQuotaSourcesStore = defineStore('quotaSources', () => {
     )
   }
 
+  function markCheckResult(id: string, succeeded: boolean, errorMsg?: string): void {
+    const idx = sourceList.value.findIndex((s) => s._id === `quota-source/${id}`)
+    if (idx < 0) return
+
+    if (succeeded) {
+      sourceList.value[idx].lastCheckSucceeded = true
+      sourceList.value[idx].credentialExpiredAt = undefined
+      sourceList.value[idx].lastError = undefined
+    } else {
+      sourceList.value[idx].lastCheckSucceeded = false
+      sourceList.value[idx].credentialExpiredAt = Date.now()
+      sourceList.value[idx].lastError = errorMsg
+    }
+
+    // Persist to repo
+    quotaSourcesRepo.update(id, {
+      lastCheckSucceeded: sourceList.value[idx].lastCheckSucceeded,
+      lastError: sourceList.value[idx].lastError,
+      credentialExpiredAt: sourceList.value[idx].credentialExpiredAt,
+    })
+  }
+
+  const expiredSources = computed(() =>
+    sourceList.value.filter((s) => s.lastCheckSucceeded === false),
+  )
+
   return {
     sourceList,
     loading,
     error,
     enabledSources,
+    expiredSources,
     fetchAll,
     addSource,
     updateSource,
     removeSource,
     searchSources,
+    markCheckResult,
   }
 })

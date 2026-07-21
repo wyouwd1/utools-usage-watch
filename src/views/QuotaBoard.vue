@@ -7,6 +7,8 @@ import { useQuotasStore } from '@/stores/quotas'
 import { refreshAll } from '@/services/quota-checker'
 import { autoRefreshScheduler } from '@/services/auto-refresh'
 import QuotaGauge from '@/components/QuotaGauge.vue'
+import CredentialExpiredBanner from '@/components/CredentialExpiredBanner.vue'
+import type { IQuotaSourceEntity } from '@/types/quota'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -75,12 +77,16 @@ function getCacheEntry(sourceId: string) {
   return quotasStore.quotaMap[`source:${sourceId}`]
 }
 
-function isCacheOutdated(sourceId: string): boolean {
-  const entry = quotasStore.quotaMap[`source:${sourceId}`]
-  if (!entry || entry.fetchedAt === 0) return false
-  // Consider outdated if older than 30 minutes
-  return Date.now() - entry.fetchedAt > 30 * 60 * 1000
-}
+	function isCacheOutdated(sourceId: string): boolean {
+	  const entry = quotasStore.quotaMap[`source:${sourceId}`]
+	  if (!entry || entry.fetchedAt === 0) return false
+	  // Consider outdated if older than 30 minutes
+	  return Date.now() - entry.fetchedAt > 30 * 60 * 1000
+	}
+	
+	function isExpired(source: IQuotaSourceEntity): boolean {
+	  return source.lastCheckSucceeded === false
+	}
 </script>
 
 <template>
@@ -120,18 +126,29 @@ function isCacheOutdated(sourceId: string): boolean {
       </div>
     </div>
 
-    <!-- Add Source button -->
-    <div class="mb-4">
-      <button
-        @click="goToAddSource"
-        class="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
-      >
-        <span>+</span>
-        <span>{{ t('quotaSources.addSource') }}</span>
-      </button>
-    </div>
+	    <!-- Add Source button -->
+	    <div class="mb-4">
+	      <button
+	        @click="goToAddSource"
+	        class="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
+	      >
+	        <span>+</span>
+	        <span>{{ t('quotaSources.addSource') }}</span>
+	      </button>
+	    </div>
 
-    <!-- Empty state -->
+	    <!-- Expired credentials banner -->
+	    <div v-if="quotaSourcesStore.expiredSources.length > 0" class="mb-4 space-y-2">
+	      <CredentialExpiredBanner
+	        v-for="src in quotaSourcesStore.expiredSources"
+	        :key="src._id"
+	        :source-id="src._id.replace('quota-source/', '')"
+	        :label="src.label"
+	        :last-error="src.lastError"
+	      />
+	    </div>
+
+	    <!-- Empty state -->
     <div v-if="quotaSourcesStore.sourceList.length === 0 && !quotaSourcesStore.loading" class="text-center py-16">
       <div class="text-4xl mb-4">📊</div>
       <p class="text-gray-400 mb-4">{{ t('quota.noData') }}</p>
@@ -155,20 +172,22 @@ function isCacheOutdated(sourceId: string): boolean {
       </div>
     </div>
 
-    <!-- Source cards grid -->
-    <div v-if="quotaSourcesStore.sourceList.length > 0" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-      <div
-        v-for="source in quotaSourcesStore.sourceList"
-        :key="source._id"
-        @click="goToSourceDetail(source._id.replace('quota-source/', ''))"
-        class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md hover:border-gray-200 transition-all cursor-pointer"
-      >
-        <!-- Card header -->
-        <div class="flex items-center justify-between mb-3">
-          <div class="flex items-center gap-2 min-w-0">
-            <span class="text-xl" :title="source.sourceType">{{ sourceIcon(source.sourceType) }}</span>
-            <span class="text-sm font-medium text-gray-800 truncate">{{ source.label }}</span>
-          </div>
+	    <!-- Source cards grid -->
+	    <div v-if="quotaSourcesStore.sourceList.length > 0" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+	      <div
+	        v-for="source in quotaSourcesStore.sourceList"
+	        :key="source._id"
+	        @click="goToSourceDetail(source._id.replace('quota-source/', ''))"
+	        class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md hover:border-gray-200 transition-all cursor-pointer"
+	        :class="{ 'opacity-60': isExpired(source) }"
+	      >
+	        <!-- Card header -->
+	        <div class="flex items-center justify-between mb-3">
+	          <div class="flex items-center gap-2 min-w-0">
+	            <span class="text-xl" :title="source.sourceType">{{ sourceIcon(source.sourceType) }}</span>
+	            <span class="text-sm font-medium text-gray-800 truncate">{{ source.label }}</span>
+	            <span v-if="isExpired(source)" class="text-amber-500 text-xs" title="凭证已过期">⚠️</span>
+	          </div>
           <span
             v-if="source.enabled"
             class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium"

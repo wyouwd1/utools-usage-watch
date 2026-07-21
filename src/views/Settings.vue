@@ -3,9 +3,11 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '@/stores/settings'
 import { useApiKeysStore } from '@/stores/apiKeys'
+import { useQuotaSourcesStore } from '@/stores/quotaSources'
 import { autoRefreshScheduler } from '@/services/auto-refresh'
 import * as apiKeysRepo from '@/db/apiKeys.repo'
 import { COLLECTION } from '@/db/index'
+import * as quotaSourcesRepo from '@/db/quotaSources.repo'
 import { encrypt } from '@/services/encrypt'
 
 const { t, locale } = useI18n()
@@ -32,15 +34,7 @@ const refreshIntervalModel = computed({
   },
 })
 
-// Alert threshold slider
-const alertThresholdModel = computed({
-  get: () => settingsStore.settings.defaultAlertThreshold,
-  set: (val: number) => {
-    settingsStore.save('defaultAlertThreshold', val)
-  },
-})
-
-// UI state
+	// UI state
 const importStatus = ref<string | null>(null)
 const exportStatus = ref<string | null>(null)
 const showResetConfirm = ref(false)
@@ -53,10 +47,13 @@ onMounted(() => {
   settingsStore.migrate()
 })
 
-// Export all data as JSON file download
-function handleExport() {
-  try {
-    const apiKeys = apiKeysStore.apiKeyList.map(k => ({
+	// Export all data as JSON file download
+	function handleExport() {
+	  try {
+	    // Load quota sources for export
+		    const quotaSources = quotaSourcesRepo.getAll()
+
+	    const apiKeys = apiKeysStore.apiKeyList.map(k => ({
       provider: k.provider,
       label: k.label,
       encryptedKey: k.encryptedKey,
@@ -71,12 +68,13 @@ function handleExport() {
       updatedAt: k.updatedAt,
     }))
 
-    const exportData = {
-      version: '1.0.0',
-      exportedAt: new Date().toISOString(),
-      settings: { ...settingsStore.settings },
-      apiKeys,
-    }
+	    const exportData = {
+	      version: '1.0.0',
+	      exportedAt: new Date().toISOString(),
+	      settings: { ...settingsStore.settings },
+	      apiKeys,
+	      quotaSources,  // NEW: export quota sources
+	    }
 
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -159,13 +157,42 @@ function handleImport(event: Event) {
             // Skip keys that fail to import
           }
         }
-      }
+	      }
 
-	      // Reload the API keys list
-	      await apiKeysStore.fetchAll()
+	      // Import quota sources
+	      if (data.quotaSources && Array.isArray(data.quotaSources)) {
+	        quotaSourcesRepo.clearAll()
+	        for (const qs of data.quotaSources) {
+	          if (qs.sourceType && qs.label) {
+	            try {
+	              quotaSourcesRepo.importEntity({
+	                _id: qs._id ?? `quota-source/${crypto.randomUUID()}`,
+	                type: 'quota-source',
+	                sourceType: qs.sourceType,
+	                label: qs.label,
+	                encryptedCredential: qs.encryptedCredential ?? '',
+	                credentialHint: qs.credentialHint ?? '',
+	                baseUrl: qs.baseUrl ?? undefined,
+	                config: qs.config ?? {},
+	                enabled: qs.enabled ?? true,
+	                sortOrder: qs.sortOrder ?? Date.now(),
+	                createdAt: qs.createdAt ?? Date.now(),
+	                updatedAt: qs.updatedAt ?? Date.now(),
+	              })
+	            } catch {
+	              // Skip sources that fail to import
+	            }
+	          }
+	        }
+	      }
+
+		      // Reload the stores
+		      await apiKeysStore.fetchAll()
+		      const quotaSourcesStore = useQuotaSourcesStore()
+		      await quotaSourcesStore.fetchAll()
 
 
-      importStatus.value = 'success'
+	      importStatus.value = 'success'
       setTimeout(() => { importStatus.value = null }, 3000)
     } catch (err) {
       importStatus.value = 'error'
@@ -222,31 +249,7 @@ function handleReset() {
       </select>
     </section>
 
-    <!-- Default alert threshold -->
-    <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-4">
-      <h2 class="text-base font-semibold text-gray-800 mb-1">{{ t('settings.alertThresholdLabel') }}</h2>
-      <p class="text-xs text-gray-400 mb-3">{{ t('settings.alertThresholdDescription') }}</p>
-      <div class="max-w-xs">
-        <div class="flex items-center justify-between mb-1">
-          <span class="text-sm text-gray-600">{{ t('settings.alertThresholdLabel') }}</span>
-          <span class="text-sm font-semibold text-blue-600">{{ alertThresholdModel }}%</span>
-        </div>
-        <input
-          v-model.number="alertThresholdModel"
-          type="range"
-          min="0"
-          max="100"
-          step="5"
-          class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-        />
-        <div class="flex justify-between text-xs text-gray-400 mt-1">
-          <span>0%</span>
-          <span>100%</span>
-        </div>
-      </div>
-    </section>
-
-    <!-- Export / Import -->
+	    <!-- Export / Import -->
     <section class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-4">
       <h2 class="text-base font-semibold text-gray-800 mb-1">{{ t('settings.export') }} / {{ t('settings.import') }}</h2>
       <p class="text-xs text-gray-400 mb-4">{{ t('settings.exportDescription') }}</p>

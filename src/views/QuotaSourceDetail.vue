@@ -3,7 +3,9 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useQuotaSourcesStore } from '@/stores/quotaSources'
-import { QuotaSourceType } from '@/types/quota'
+import { QuotaSourceType, isCurlParseError } from '@/types/quota'
+import type { CurlParseResult } from '@/types/quota'
+import { parseCurl } from '@/services/curl-parser'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -20,10 +22,9 @@ const sourceTypeConfig: Record<
 > = {
   [QuotaSourceType.OPENCODE_GO]: {
     label: 'OpenCode Go',
-    defaultBaseUrl: 'https://api.opencode-go.com',
+    defaultBaseUrl: 'https://opencode.ai',
     configFields: [
-      { key: 'sec_token', label: 'SEC Token', type: 'password', required: true },
-      { key: 'region', label: 'Region', type: 'text' },
+      { key: 'workspaceId', label: 'Workspace ID', type: 'text', required: false },
     ],
   },
   [QuotaSourceType.BAILIAN]: {
@@ -85,6 +86,13 @@ const existingSource = computed(() => {
   ) ?? null
 })
 
+// cURL paste
+const showCurlInput = ref(false)
+const curlCommand = ref('')
+const parsedResult = ref<CurlParseResult | null>(null)
+const parseError = ref<string | null>(null)
+const showPreview = ref(false)
+
 const selectedConfig = computed(() => {
   if (!sourceType.value) return null
   return sourceTypeConfig[sourceType.value] ?? null
@@ -99,6 +107,11 @@ const sourceTypeOptions = computed(() => {
     value: type as QuotaSourceType,
     label: cfg.label,
   }))
+})
+
+const hasCurlHint = computed(() => {
+  return sourceType.value === QuotaSourceType.OPENCODE_GO || 
+         sourceType.value === QuotaSourceType.BAILIAN
 })
 
 // Load existing source data into form
@@ -149,6 +162,70 @@ watch(sourceType, (val) => {
     }
   }
 })
+
+function handleParseCurl(): void {
+  parseError.value = null
+  parsedResult.value = null
+  showPreview.value = false
+  
+  const result = parseCurl(curlCommand.value)
+  if (isCurlParseError(result)) {
+    parseError.value = result.userMessage.zh
+    return
+  }
+  
+  parsedResult.value = result
+  showPreview.value = true
+}
+
+function applyCurlResult(): void {
+  if (!parsedResult.value) return
+  
+  const r = parsedResult.value
+  baseUrl.value = r.baseUrl
+  
+  // Fill credential from cookies
+  const cookieEntries = Object.entries(r.cookies)
+  if (cookieEntries.length > 0) {
+    credential.value = Object.entries(r.headers)
+      .find(([k]) => k.toLowerCase() === 'cookie')?.[1] 
+      ?? cookieEntries.map(([k, v]) => `${k}=${v}`).join('; ')
+  }
+  
+  // Fill workspaceId
+  if (r.workspaceId) {
+    configValues.value['workspaceId'] = r.workspaceId
+  }
+  
+  // Fill sec_token (for Bailian)
+  if (r.secToken) {
+    configValues.value['sec_token'] = r.secToken
+  }
+  
+  showPreview.value = false
+  parsedResult.value = null
+  curlCommand.value = ''
+  showCurlInput.value = false
+}
+
+function cancelPreview(): void {
+  showPreview.value = false
+  parsedResult.value = null
+}
+
+function getCredentialFromResult(): string {
+  if (!parsedResult.value) return ''
+  const cookieHeader = Object.entries(parsedResult.value.headers)
+    .find(([k]) => k.toLowerCase() === 'cookie')
+  if (cookieHeader) return cookieHeader[1]
+  return Object.entries(parsedResult.value.cookies)
+    .map(([k, v]) => `${k}=${v}`).join('; ')
+}
+
+function maskCredential(cred: string): string {
+  if (!cred || cred.length < 8) return cred
+  return cred.slice(0, 4) + '****' + cred.slice(-4)
+}
 
 function isFormValid(): boolean {
   if (!sourceType.value) return false
@@ -311,6 +388,79 @@ async function handleSave() {
         <p v-if="!isNew" class="mt-1 text-xs text-gray-400">
           {{ t('quotaSources.keepExistingCredential') }}
         </p>
+      </div>
+
+      <!-- cURL paste (OpenCode Go / Bailian) -->
+      <div v-if="hasCurlHint" class="border-t border-gray-100 pt-4">
+        <button
+          type="button"
+          @click="showCurlInput = !showCurlInput"
+          class="text-sm text-blue-600 hover:text-blue-700 font-medium"
+        >
+          {{ showCurlInput ? '− ' : '+ ' }}{{ t('quotaSources.pasteCurl') }}
+        </button>
+        
+        <div v-if="showCurlInput" class="mt-2 space-y-2">
+          <textarea
+            v-model="curlCommand"
+            rows="4"
+            class="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            :placeholder="t('quotaSources.curlPlaceholder')"
+          ></textarea>
+          
+          <button
+            type="button"
+            @click="handleParseCurl"
+            class="px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
+          >
+            {{ t('quotaSources.parseCurl') }}
+          </button>
+          
+          <!-- Error message -->
+          <p v-if="parseError" class="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">
+            {{ parseError }}
+          </p>
+          
+          <!-- Preview section -->
+          <div v-if="showPreview && parsedResult" class="bg-gray-50 rounded-lg border border-gray-200 p-3 space-y-1.5">
+            <p class="text-xs font-medium text-gray-700 mb-2">{{ t('quotaSources.parseResult') }}</p>
+            
+            <div class="flex items-center gap-2 text-xs">
+              <span class="text-green-600">✅</span>
+              <span class="text-gray-500 w-20">{{ t('quotaSources.baseUrl') }}:</span>
+              <span class="text-gray-800 font-mono">{{ parsedResult.baseUrl }}</span>
+            </div>
+            
+            <div class="flex items-center gap-2 text-xs">
+              <span class="text-green-600">✅</span>
+              <span class="text-gray-500 w-20">{{ t('quotaSources.credential') }}:</span>
+              <span class="text-gray-800 font-mono">{{ maskCredential(getCredentialFromResult()) }}</span>
+            </div>
+            
+            <div v-if="parsedResult.workspaceId" class="flex items-center gap-2 text-xs">
+              <span class="text-green-600">✅</span>
+              <span class="text-gray-500 w-20">Workspace ID:</span>
+              <span class="text-gray-800 font-mono">{{ parsedResult.workspaceId }}</span>
+            </div>
+            
+            <div class="flex items-center justify-end gap-2 mt-3 pt-2 border-t border-gray-200">
+              <button
+                type="button"
+                @click="cancelPreview"
+                class="px-2.5 py-1 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded hover:bg-gray-50 transition-colors"
+              >
+                {{ t('common.cancel') }}
+              </button>
+              <button
+                type="button"
+                @click="applyCurlResult"
+                class="px-2.5 py-1 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors"
+              >
+                {{ t('quotaSources.confirmFill') }}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Base URL input -->

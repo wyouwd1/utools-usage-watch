@@ -1,566 +1,464 @@
-# Implementation Plan: utools-usage-watch 重构
+# Implementation Plan: 额度监控模块增强
 
-> 聚焦两个核心修正：① API Key 纯化 ② 额度监控独立化（参考 cc-hud）
+> 基于 SPEC.md（访谈后版本），在现有实现上增量增强。
+> 聚焦：cURL 解析 + 预览确认 + 凭证过期检测 + 设置清理
 
----
+## Overview
 
-## 代码复用分析（摸完代码后的结论）
+现有实现已是完整的，这次不做重写，而是**增量增强**：
 
-### 可直接复用（零修改）
-
-| 文件 | 复用方式 |
-|------|---------|
-| `db/index.ts` — `docId()`, `getByPrefix()`, `putDoc()`, `removeDoc()` | 额度源 CRUD 直接调用 |
-| `services/encrypt.ts` — `encrypt()`, `decrypt()` | 凭证加密直接复用 |
-| `components/QuotaGauge.vue` | cc-hud 进度条，直接复用 |
-| `components/QuotaTrendChart.vue` | Chart.js 趋势，直接复用 |
-| `components/AlertToast.vue` | 通知组件，直接复用 |
-| `components/SearchInput.vue` | 搜索框，直接复用 |
-| `services/auto-refresh.ts` | 调度器 class（需改回调逻辑） |
-| `stores/quotas.ts` | 内存缓存机制不变，key 从 apiKeyId 改为 sourceId |
-
-### 需修改
-
-| 文件 | 改什么 |
-|------|--------|
-| `types/apikey.ts` | 删除 `quotaAlertThreshold` 字段 |
-| `types/quota.ts` | 新增 `QuotaSourceType` 枚举 + `IQuotaSourceEntity` 接口 |
-| `db/apiKeys.repo.ts` | 删除 `add()` 中的 `quotaAlertThreshold` |
-| `components/AddKeyDialog.vue` | 删除阈值滑块（4 行） |
-| `services/quota-checker.ts` | 重写：基于 quota sources 而非 API keys |
-| `services/auto-refresh.ts` | 告警逻辑改为使用 quota sources 而非 apiKeys |
-| `stores/quotas.ts` | 键名重构：apiKeyId → sourceId |
-| `views/QuotaBoard.vue` | 重写：展示额度源而非 API Key |
-| `views/QuotaDetail.vue` | 重写：展示单个额度源详情 |
-| `views/Dashboard.vue` | 更新额度告警区引用 |
-| `router/index.ts` | 添加 `/quota-source/:id` 路由 |
-| `i18n/zh-CN.ts` + `en-US.ts` | 增补额度源相关翻译 |
-
-### 需新增
-
-| 文件 | 说明 |
-|------|------|
-| `db/quotaSources.repo.ts` | CRUD（复用 db/index.ts 工具） |
-| `stores/quotaSources.ts` | Pinia store |
-| `components/AddQuotaSourceDialog.vue` | 新增额度源弹窗 |
-| `views/QuotaSourceDetail.vue` | 额度源详情/编辑页 |
-| `services/quota-sources/` | **额度源适配器体系** |
-
----
+1. **cURL 解析引擎** — 独立 `curl-parser.ts`，支持 OpenCode Go + 百炼
+2. **预览确认流程** — 粘贴 cURL → 解析 → 内联预览 → 确认填充
+3. **QuotaSourceDetail 修复** — OpenCode Go 配置字段修正 + cURL 重绑定
+4. **凭证过期检测** — 401 响应标记 + CredentialExpiredBanner + 3 次失败自动禁用
+5. **Settings 清理** — 移除无用阈值滑块 + 导出导入含额度源
 
 ## Architecture Decisions
 
 | 决策 | 选择 | 理由 |
 |------|------|------|
-| **额度源适配器 vs Provider 适配器** | 完全独立 | API Key 的 Provider Adapter 只管连通性测试；Quota Source Adapter 只管额度查询，两者数据不互通 |
-| **额度源凭证存储** | utools.db，加密 | 与 API Key 共用 AES-GCM 加密服务 |
-| **适配器注册** | 手动注册（类似 cc-hud fallback 链） | 每个额度源独立模块，在 registry 中统一注册 |
-| **UI 复用** | QuotaBoard 保持独立页面 | 侧边栏现有「额度监控」入口不变，内容改为展示额度源 |
+| cURL 解析器 | 独立 `src/services/curl-parser.ts` | 可单元测试，AddDialog 和 Detail 复用 |
+| 解析预览 | 内联预览区域（非弹窗） | 交互更流畅，减少弹窗层级 |
+| 过期字段 | 在 IQuotaSourceEntity 新增 3 个字段 | 持久化存储，重启后仍可识别过期状态 |
+| 自动禁用 | auto-refresh.ts 内维护 failureCount Map（内存） | 不污染数据模型，重启后重置计数 |
+| cURL 范围 | 仅 OpenCode Go 和百炼 | 其他源有 API Key，不需要 cURL |
+
+## Dependency Graph
+
+```
+Round 1（3 Agents 并行）:
+  Agent A: curl-parser.ts + tests ────────┐
+  Agent B: 类型扩展 (expiry fields)        │  ┌── Settings清理 + i18n stale keys
+  Agent C: Settings清理 + i18n stale keys ─┘  │
+
+Round 2（Agent A 完成后，2 Agents 并行）:
+  Agent A (继续): AddQuotaSourceDialog + CurlPreview ──┐
+  Agent A (继续): QuotaSourceDetail 修复               │
+  Agent B:  过期检测 (quota-checker + store) ──────────┤
+  Agent B:  CredentialExpiredBanner + UI              │
+  Agent B:  auto-refresh auto-disable ────────────────┘
+
+Round 3:
+  全量测试 + 构建 + H5 预览验证
+```
 
 ---
 
 ## Task List
 
-### Phase 1: 类型清理 + 额度源类型定义
-
-#### Task 1.1: API Key 类型清理
-
-**Description:** 从 `IApiKeyEntity` 中删除 `quotaAlertThreshold` 字段，清理相关代码。
-
-**Files:**
-- `src/types/apikey.ts` — 删除 `quotaAlertThreshold: number`（第 35 行）
-- `src/db/apiKeys.repo.ts` — 删除 `quotaAlertThreshold: data.quotaAlertThreshold ?? 80`（第 40 行）
-- `src/components/AddKeyDialog.vue` — 删除阈值滑块（第 28 行 `alertThreshold`、第 112 行、第 243-250 行）
-- `src/i18n/zh-CN.ts` + `en-US.ts` — 删除 `apiKeys.alertThreshold` 翻译
-
-**Acceptance:**
-- [ ] `IApiKeyEntity` 中无 `quotaAlertThreshold`
-- [ ] AddKeyDialog 中无阈值滑块
-- [ ] 构建通过，无类型错误
-
-**Verify:** `pnpm build && pnpm test`
-
-**Scope:** S（4 文件，简单删除）
+### Phase 0: Foundation（Round 1 — 3 Agents 并行）
 
 ---
 
-#### Task 1.2: 额度源类型定义
+#### Task 0.1: 创建独立 cURL 解析模块
 
-**Description:** 在 `types/quota.ts` 中新增 `QuotaSourceType` 枚举和 `IQuotaSourceEntity` 接口。
+**Description:** 将 `AddQuotaSourceDialog.vue` 中的 `parseCurl()` 函数抽离为独立模块 `src/services/curl-parser.ts`。支持 OpenCode Go 和百炼的 cURL 命令解析。返回结构化结果供 UI 预览。
 
-**Files:**
-- `src/types/quota.ts` — 新增：
-
+**Implement `parseCurl()`:**
 ```typescript
-export enum QuotaSourceType {
-  OPENCODE_GO = 'opencode-go',
-  BAILIAN = 'bailian',
-  DEEPSEEK = 'deepseek',
-  MOONSHOT = 'moonshot',
-  GROQ = 'groq',
-  QWEN = 'qwen',
-  GLM = 'glm',
-  MINIMAX = 'minimax',
+interface CurlParseResult {
+  url: string
+  baseUrl: string
+  headers: Record<string, string>
+  cookies: Record<string, string>
+  workspaceId?: string
+  secToken?: string   // for Bailian
 }
 
+interface CurlParseError {
+  code: 'NO_URL' | 'NO_CREDENTIAL' | 'INVALID_FORMAT'
+  message: string
+  userMessage: { zh: string; en: string }
+}
+```
+
+- 提取 URL（`curl\s+['"]?([^'"\s]+)`）
+- 提取 base URL（`https?://[^/]+`）
+- 提取 Cookie（`Cookie: xxx` 或 `-H "cookie: xxx"`）
+- 提取 workspaceId（`/workspace/([^/\s?]+)`）
+- 提取 sec_token（query param 或 header）
+- 所有提取失败返回结构化错误，不抛异常
+
+**Acceptance criteria:**
+- [ ] `parseCurl()` 成功返回 `CurlParseResult`
+- [ ] 支持 OpenCode Go 格式：提取 Cookie auth + workspaceId
+- [ ] 支持百炼格式：提取 Cookie + sec_token
+- [ ] 解析失败返回 `CurlParseError` 含中英文错误信息
+- [ ] 单元测试覆盖：成功、空字符串、无 URL、无 cookie、格式错误
+
+**Verification:**
+- [ ] `pnpm test -- --grep "curl-parser"` 通过
+- [ ] 边界情况全覆盖
+
+**Dependencies:** None
+
+**Files:**
+- `src/services/curl-parser.ts` **(创建)**
+- `tests/unit/services/curl-parser.spec.ts` **(创建)**
+
+**Estimated scope:** Small (2 files)
+
+---
+
+#### Task 0.2: 扩展 IQuotaSourceEntity 类型 — 过期检测字段
+
+**Description:** 在 `IQuotaSourceEntity` 新增 3 个可选字段。
+
+**Changes:**
+```typescript
 export interface IQuotaSourceEntity {
-  _id: string
-  _rev?: string
-  type: 'quota-source'
-  sourceType: QuotaSourceType
-  label: string
-  encryptedCredential: string
-  credentialHint: string
-  baseUrl?: string
-  config?: Record<string, any>
-  enabled: boolean
-  sortOrder: number
-  createdAt: number
-  updatedAt: number
+  // ... existing fields ...
+  credentialExpiredAt?: number     // cookie 过期时间戳
+  lastCheckSucceeded?: boolean     // 上次检查是否成功
+  lastError?: string               // 上次错误信息
 }
 ```
 
-- `src/types/index.ts` — 确保导出新类型
+同时将 `CurlParseResult` 和 `CurlParseError` 接口定义放在 `types/quota.ts`（供 curl-parser.ts 和组件共用）。
 
-**Acceptance:**
-- [ ] `QuotaSourceType` 枚举含全部 8 种额度源
-- [ ] `IQuotaSourceEntity` 接口完整
-- [ ] 构建通过
+**Acceptance criteria:**
+- [ ] `IQuotaSourceEntity` 新增 3 个可选字段
+- [ ] `CurlParseResult` 和 `CurlParseError` 接口在 `types/quota.ts` 中
+- [ ] 无编译错误，向后兼容
 
-**Verify:** `pnpm build`
+**Verification:**
+- [ ] `pnpm type-check` 通过
 
-**Scope:** S（2 文件）
-
----
-
-### ✅ Checkpoint: Phase 1
-- [ ] 构建通过，类型无错误
-- [ ] 测试全部通过
-
----
-
-### Phase 2: 额度源数据层
-
-#### Task 2.1: quotaSources Repository
-
-**Description:** 创建 `quotaSources.repo.ts`，复用 `db/index.ts` 的 `docId()`、`getByPrefix()`、`putDoc()`、`removeDoc()` 工具函数。模式完全参考 `apiKeys.repo.ts`。
+**Dependencies:** None
 
 **Files:**
-- `src/db/quotaSources.repo.ts`
+- `src/types/quota.ts` (修改)
 
-```typescript
-// CRUD: getAll, getById, add, update, remove, search
-// _id 前缀: quota-source/<uuid>
-// 凭证加密: 调用 encrypt() 服务
-// 脱敏: 生成 credentialHint
+**Estimated scope:** Small (1 file)
+
+---
+
+#### Task 0.3: Settings 清理 + i18n stale keys
+
+**Description:** 三件事一起做：
+1. **Settings.vue** 移除"默认预警阈值"整个 section（template + script）
+2. **handleExport()** 增加 quotaSources 数据
+3. **handleImport()** 增加 quotaSources 导入（向后兼容旧格式）
+4. **i18n** 移除 `apiKeys.threshold`、`settings.alertThreshold*`
+
+**Acceptance criteria:**
+- [ ] Settings 页面不再有阈值滑块
+- [ ] 导出的 JSON 包含 `quotaSources` 数组
+- [ ] 导入能恢复额度源数据（调用 `quotaSourcesRepo.importEntity`）
+- [ ] 旧备份文件（无 quotaSources 字段）也能正常导入
+- [ ] i18n 无 `threshold`/`alertThreshold` 残留
+
+**Verification:**
+- [ ] `pnpm test` 通过
+- [ ] 手动验证：导出含 quotaSources → 清空 → 导入恢复
+
+**Dependencies:** None
+
+**Files:**
+- `src/views/Settings.vue` (修改)
+- `src/i18n/zh-CN.ts` (修改)
+- `src/i18n/en-US.ts` (修改)
+
+**Estimated scope:** Medium (3 files)
+
+---
+
+### ✅ Checkpoint: Phase 0 Complete
+- [ ] `pnpm type-check` 通过
+- [ ] `pnpm test -- --grep "curl-parser"` 通过
+- [ ] Settings 阈值移除 + 导出导入含额度源
+- [ ] 可以进入 Round 2
+
+---
+
+### Phase 1: cURL Feature（Round 2 — 依赖 Task 0.1）
+
+---
+
+#### Task 1.1: AddQuotaSourceDialog 改造 — 集成 curl-parser + 预览确认
+
+**Description:** 改造 `AddQuotaSourceDialog.vue`：
+1. 引入 `curl-parser.ts` 替换内联 `parseCurl()`
+2. 点击"解析"后，**在下方展开内联预览区域**（非弹窗），显示：
+   - Base URL ✅
+   - Cookie（脱敏）✅
+   - Workspace ID（如有）✅
+   - sec_token（如有，百炼）✅
+3. 用户点击"确认填充" → 字段自动填入表单
+4. 用户可手动修改预览结果再确认
+5. 解析失败时显示具体错误 + 展开手动表单 fallback
+
+**Preview UI (inline, same dialog):**
+```
+┌─────────────────────────────────────┐
+│ 📋 粘贴 cURL                        │
+│ ┌─────────────────────────────┐    │
+│ │ curl 'https://...' -H ...  │    │
+│ └─────────────────────────────┘    │
+│ [🔍 解析 cURL]                      │
+│                                     │
+│ ┌─ 解析结果 ─────────────────────┐  │
+│ │ ✅ Base URL: opencode.ai       │  │
+│ │ ✅ Cookie:   oc_****89ab       │  │
+│ │ ✅ Workspace: ws_abc123        │  │
+│ │                                │  │
+│ │ [✗ 取消]  [✓ 确认填充]        │  │
+│ └────────────────────────────────┘  │
+└─────────────────────────────────────┘
 ```
 
-**Acceptance:**
-- [ ] CRUD 完整（getAll / getById / add / update / remove / search）
-- [ ] 新增时自动加密凭证 + 生成脱敏提示
-- [ ] 复用 `getByPrefix("quota-source/")` 查询
+**Acceptance criteria:**
+- [ ] 粘贴 cURL → 点击"解析" → 显示内联预览
+- [ ] 预览数据脱敏显示
+- [ ] 确认填充后表单字段自动填入
+- [ ] 解析失败 → 显示错误原因 + 手动表单可用
+- [ ] 引导文字保持 i18n（兼容双语，已实现）
 
-**Verify:** `pnpm build`
+**Verification:**
+- [ ] `pnpm test` 通过
+- [ ] 手动测试：粘贴 OpenCode Go cURL → 解析 → 预览 → 确认 → 保存
 
-**Scope:** M（1 文件，~60 行）
-
----
-
-#### Task 2.2: quotaSources Pinia Store
-
-**Description:** 创建 `quotaSources` store，模式参考 `apiKeys` store。
+**Dependencies:** Task 0.1 (curl-parser.ts)
 
 **Files:**
-- `src/stores/quotaSources.ts`
+- `src/components/AddQuotaSourceDialog.vue` (修改)
 
-**Acceptance:**
-- [ ] state: `sourceList`, `loading`, `error`
-- [ ] actions: `fetchAll`, `addSource`, `updateSource`, `removeSource`
-- [ ] getters: `enabledSources`（过滤 enabled=true）
-
-**Verify:** `pnpm build`
-
-**Scope:** S（1 文件）
+**Estimated scope:** Medium (1 file)
 
 ---
 
-#### Task 2.3: COLLECTION 常量更新
+#### Task 1.2: 修复 QuotaSourceDetail.vue — OpenCode Go 配置 + cURL 重绑定
 
-**Description:** 在 `db/index.ts` 的 `COLLECTION` 对象中添加 `QUOTA_SOURCE: 'quota-source/'`。
+**Description:** 修复两个问题：
+
+**问题 A — 配置字段错误（当前 lines 21-27）：**
+```
+// 当前（错误 — 复制了百炼的字段）
+OPENCODE_GO: {
+  label: 'OpenCode Go',
+  defaultBaseUrl: 'https://api.opencode-go.com',    // ← 错
+  configFields: [
+    { key: 'sec_token', label: 'SEC Token', type: 'password', required: true },  // ← 错
+    { key: 'region', label: 'Region', type: 'text' },   // ← 错
+  ],
+},
+
+// 修正后
+OPENCODE_GO: {
+  label: 'OpenCode Go',
+  defaultBaseUrl: 'https://opencode.ai',               // ✅
+  configFields: [
+    { key: 'workspaceId', label: 'Workspace ID', type: 'text', required: false },  // ✅
+  ],
+},
+```
+
+**问题 B — 编辑页无 cURL 粘贴：**
+- 在 credential 输入框下方添加 cURL 粘贴区域（与 AddQuotaSourceDialog 相同）
+- 解析后直接填充 credential + baseUrl + configValues
+- 支持"更新凭证"场景：用户粘贴新 cURL → 预览 → 确认 → 凭证更新
+
+**Acceptance criteria:**
+- [ ] OpenCode Go configFields 修正为 `workspaceId`
+- [ ] OpenCode Go defaultBaseUrl 修正为 `https://opencode.ai`
+- [ ] 编辑页有 cURL 粘贴 + 预览区域
+- [ ] 粘贴新 cURL 可更新凭证
+
+**Verification:**
+- [ ] `pnpm test` 通过
+- [ ] 手动测试：编辑 OpenCode Go 源 → 粘贴新 cURL → 凭证更新成功
+
+**Dependencies:** Task 0.1 (curl-parser.ts), Task 1.1 (复用预览组件模式)
 
 **Files:**
-- `src/db/index.ts` — 添加一行
+- `src/views/QuotaSourceDetail.vue` (修改)
 
-**Acceptance:**
-- [ ] `COLLECTION.QUOTA_SOURCE` 可用
-
-**Verify:** `pnpm build`
-
-**Scope:** XS（1 行）
+**Estimated scope:** Medium (1 file)
 
 ---
 
-### ✅ Checkpoint: Phase 2
-- [ ] 数据层完整：类型 + repo + store
-- [ ] `pnpm build` 通过
+### Phase 2: Expiry Detection（Round 2 — 可和 Phase 1 并行）
 
 ---
 
-### Phase 3: 额度源 UI
+#### Task 2.1: 凭证过期检测 — quota-checker.ts + quotaSources store
 
-#### Task 3.1: AddQuotaSourceDialog 组件
+**Description:** 
+在 **quota-checker.ts** 的 `checkSingleSource()` 中增强：
+- catch 检测 `error.message` 含 `401` 或 `Unauthorized` → 调用 `sourcesStore.markCheckResult(id, false, message)`
+- 成功时调用 `markCheckResult(id, true)`
+- 非 401 错误（超时、网络错误）不标记过期
 
-**Description:** 新增额度源的弹窗表单，参考 `AddKeyDialog.vue` 的模式。
+在 **quotaSources store** 新增：
+```typescript
+function markCheckResult(id: string, succeeded: boolean, errorMsg?: string): void
+// 更新 lastCheckSucceeded, lastError
+// succeeded=false 时设置 credentialExpiredAt = Date.now()
+// succeeded=true 时清空过期标记
 
-**表单字段：**
-- 额度源类型下拉（QuotaSourceType 枚举）
-- 用户标签
-- 凭证输入（password 类型，可切换显示）
-- 凭证脱敏提示
-- Base URL（可选，预填默认值）
-- 额外配置（根据类型动态显示：如百炼需要 sec_token + region）
+const expiredSources: ComputedRef<IQuotaSourceEntity[]>
+// 过滤 lastCheckSucceeded === false 的源
+```
+
+**quotaSources.repo.ts** 的 `update()` 要能持久化这些新字段（已有通用 update 逻辑，确认即可）。
+
+**Acceptance criteria:**
+- [ ] 401 响应 → `markCheckResult(id, false, '401 Unauthorized')`
+- [ ] `credentialExpiredAt` 被设置
+- [ ] 成功响应 → 清空过期标记
+- [ ] 非 401 错误不标记过期
+- [ ] `expiredSources` 正确返回过期源列表
+
+**Verification:**
+- [ ] `pnpm test -- --grep "quota-checker"` 通过
+- [ ] `pnpm test -- --grep "quotaSources"` 通过
+
+**Dependencies:** Task 0.2 (types updated)
 
 **Files:**
-- `src/components/AddQuotaSourceDialog.vue`
+- `src/services/quota-checker.ts` (修改)
+- `src/stores/quotaSources.ts` (修改)
+- `src/db/quotaSources.repo.ts` (确认或微调)
 
-**Acceptance:**
-- [ ] 选择类型后显示对应的凭证字段
-- [ ] 保存时加密凭证，写入 quotaSources repo
-- [ ] 表单校验：类型必选、凭证必填
-- [ ] 保存后关闭弹窗，列表更新
-
-**Verify:** 手动 UI 检查
-
-**Scope:** M（1 文件）
+**Estimated scope:** Medium (2-3 files)
 
 ---
 
-#### Task 3.2: QuotaSourceDetail 页面
+#### Task 2.2: CredentialExpiredBanner + UI 集成
 
-**Description:** 单个额度源的详情/编辑页面，参考 `ApiKeyDetail.vue`。
+**Description:** 创建凭证过期提示条组件，集成到 QuotaBoard 和 QuotaDetail。
+
+**CredentialExpiredBanner.vue:**
+```
+┌──────────────────────────────────────────────┐
+│ ⚠️ 凭证已过期 · opencode-go · 最后错误: 401  │
+│ 请重新绑定凭证以继续监控额度                   │
+│ [立即更新 → /quota-source/:id]               │
+└──────────────────────────────────────────────┘
+```
+
+**QuotaBoard.vue 改动：**
+- 卡片中 `credentialExpiredAt` 的源显示 ⚠️ 标记
+- 卡片变为半透明灰色状态
+- 但仍显示最后一次成功的额度数据
+
+**QuotaDetail.vue 改动：**
+- 页面顶部显示 CredentialExpiredBanner
+- 刷新按钮旁提示"凭证已过期"
+
+**Acceptance criteria:**
+- [ ] CredentialExpiredBanner 渲染黄色警告条 + 跳转链接
+- [ ] QuotaBoard 过期卡片 ⚠️ 标记 + 灰色半透明
+- [ ] QuotaDetail 顶部显示 Banner
+- [ ] 无过期源时不渲染
+
+**Verification:**
+- [ ] `pnpm test` 通过
+- [ ] 手动验证：手动设置 `lastCheckSucceeded=false` → 页面过期提示
+
+**Dependencies:** Task 2.1 (store 能返回过期源)
 
 **Files:**
-- `src/views/QuotaSourceDetail.vue`
+- `src/components/CredentialExpiredBanner.vue` **(创建)**
+- `src/views/QuotaBoard.vue` (修改)
+- `src/views/QuotaDetail.vue` (修改)
 
-**Acceptance:**
-- [ ] 编辑已有额度源的标签、凭证、配置
-- [ ] 保存更新到 repo
-- [ ] 返回列表页
-
-**Verify:** 手动 UI 检查
-
-**Scope:** M（1 文件）
+**Estimated scope:** Medium (3 files)
 
 ---
 
-#### Task 3.3: 路由更新
+#### Task 2.3: AutoRefresh — 3 次连续失败自动禁用
 
-**Description:** 添加 `/quota-source/:id` 路由。
-
-**Files:**
-- `src/router/index.ts` — 添加路由：
+**Description:** 在 `auto-refresh.ts` 中维护连续失败计数。连续 3 次失败 → 自动禁用额度源。
 
 ```typescript
-{
-  path: 'quota-source/:id',
-  name: 'QuotaSourceDetail',
-  component: () => import('@/views/QuotaSourceDetail.vue'),
+class AutoRefreshScheduler {
+  private failureCount = new Map<string, number>()  // sourceId → count
+  
+  // 每次 refreshAll 后检查
+  private async refreshAllWithTracking(): Promise<void> {
+    // 在 refreshAll 完成后，检查每个源的 lastCheckSucceeded
+    // 如果 false → failureCount 增加
+    // 如果 true → failureCount 删除
+    // 如果 >= 3 → 调用 quotaSourcesStore.updateSource(id, { enabled: false })
+  }
 }
 ```
 
-**Acceptance:**
-- [ ] `/quota-source/new` → 新增
-- [ ] `/quota-source/:id` → 编辑
+- 成功请求清除该源的计数
+- 计数在 `start()` 调用时重置
+- 自动禁用后不需要额外通知（credentialExpiredBanner 会显示）
 
-**Verify:** `pnpm build`
+**Acceptance criteria:**
+- [ ] `failureCount` Map 跟踪每个源的连续失败次数
+- [ ] 成功请求重置计数
+- [ ] 达到 3 次时自动 `enabled = false`
+- [ ] start() 重置所有计数
 
-**Scope:** XS（1 文件，2 行）
+**Verification:**
+- [ ] `pnpm test -- --grep "auto-refresh"` 通过
+- [ ] 单元测试：mock 3 次失败 → 验证 updateSource 被调用
 
----
-
-### ✅ Checkpoint: Phase 3
-- [ ] 可以添加/编辑/删除额度源
-- [ ] 凭证加密存储
-
----
-
-### Phase 4: 额度源适配器体系（参考 cc-hud）
-
-#### Task 4.1: IQuotaSourceAdapter 接口 + Registry
-
-**Description:** 定义额度源适配器接口和注册表。与 Provider Adapter 完全独立。
+**Dependencies:** Task 2.1 (store 有 updateSource)
 
 **Files:**
-- `src/services/quota-sources/index.ts` — 接口定义
-- `src/services/quota-sources/registry.ts` — 注册表 + fallback 链
+- `src/services/auto-refresh.ts` (修改)
 
-```typescript
-export interface IQuotaSourceAdapter {
-  readonly sourceType: QuotaSourceType
-  readonly label: string
-  readonly defaultBaseUrl?: string
-  checkQuota(credential: string, config?: Record<string, any>): Promise<IQuotaWindows | null>
-}
-```
-
-**Acceptance:**
-- [ ] 接口定义完整
-- [ ] 注册表支持 register / get / getAll
-
-**Verify:** `pnpm build`
-
-**Scope:** S（2 文件）
+**Estimated scope:** Small (1 file)
 
 ---
 
-#### Task 4.2: 核心额度源适配器（参考 cc-hud 对应模块）
-
-**Description:** 实现 8 个额度源适配器。参考 cc-hud 的现有实现直接移植。
-
-**Files:**
-
-| 适配器 | 参考 cc-hud | 凭证类型 | API |
-|--------|------------|---------|-----|
-| `opencode.ts` | `opencode.js` | auth cookie | 解析 opencode.ai workspace HTML |
-| `bailian.ts` | `bailian.js` | cookie + sec_token | 百炼 API |
-| `deepseek.ts` | `balance.js` | apiKey | `GET /user/balance` |
-| `moonshot.ts` | `moonshot.js` | apiKey | `GET /v1/billing/balance` |
-| `groq.ts` | `groq.js` | apiKey | `GET /v1/user/usage` |
-| `qwen.ts` | `qwen.js` | apiKey | `POST /api/v1/billing/query` |
-| `glm.ts` | `glm.js` | apiKey | `GET /api/biz/account/query*` |
-| `minimax.ts` | `mmx.js` | apiKey | `GET /v1/token_plan/remains` |
-
-**Acceptance:**
-- [ ] 每个适配器 `checkQuota()` 正常返回 `IQuotaWindows | null`
-- [ ] 网络错误时静默返回 null（不抛异常）
-- [ ] 每个适配器有 isolation / parse / error 测试
-
-**Verify:** `pnpm test`
-
-**Scope:** L（8 适配器 + 注册）
+### ✅ Checkpoint: Final
+- [ ] `pnpm test` 全量通过（150+ 测试）
+- [ ] `pnpm build` 构建成功，无警告
+- [ ] 手动验证 cURL 流程：粘贴 → 解析 → 预览 → 确认 → 保存
+- [ ] 手动验证过期流程：mock 401 → 过期标记 → Banner → 重绑定 → 恢复
+- [ ] 手动验证 Settings：导出含 quotaSources → 导入恢复
+- [ ] H5 预览检查 UI 无异常
 
 ---
 
-#### Task 4.3: 配额源适配器测试
+## Risks and Mitigations
 
-**Description:** 每个适配器 4 维度测试（isolation / parse / error / cache）。
-
-**Files:**
-- `tests/unit/services/quota-sources/opencode.spec.ts`
-- `tests/unit/services/quota-sources/bailian.spec.ts`
-- ... (每个适配器一个测试文件)
-
-**Acceptance:**
-- [ ] 每个适配器覆盖 4 个维度
-- [ ] 测试通过
-
-**Verify:** `pnpm test`
-
-**Scope:** M（8 测试文件）
+| 风险 | 影响 | 缓解措施 |
+|------|------|---------|
+| 百炼 sec_token 可能在 URL query 或 header 中 | Medium | curl-parser 同时检查 header + query param |
+| 现有测试因类型变更失败 | Medium | Task 0.2 后立即跑 `pnpm test` 验证 |
+| QuotaSourceDetail 和 AddDialog cURL 逻辑重复 | Low | 复用 curl-parser.ts，组件内只做 UI |
+| Settings 导入旧备份（无 quotaSources） | Low | `?.` 可选链 + 默认 `[]` 处理 |
 
 ---
 
-### ✅ Checkpoint: Phase 4
-- [ ] 全部 8 个额度源适配器实现 + 测试通过
-
----
-
-### Phase 5: 额度查询引擎重构
-
-#### Task 5.1: QuotaChecker 重写
-
-**Description:** 重写 `quota-checker.ts`，从基于 API Key 改为基于 Quota Source。核心逻辑不变（withCache + TTL + stale-while-revalidate），只是数据源从 `apiKeysStore.activeKeys` 改为 `quotaSourcesStore.enabledSources`。
-
-**Files:**
-- `src/services/quota-checker.ts` — 重写
-- `src/stores/quotas.ts` — 键名重构：`apiKeyId` → `sourceId`（保持内部结构不变）
-
-**Acceptance:**
-- [ ] `checkSingleSource(sourceId)` — 基于额度源 ID 查询
-- [ ] `refreshAll()` — 并行刷新所有 enabled 额度源
-- [ ] `forceRefreshSource(sourceId)` — 强制刷新
-- [ ] 缓存 TTL 5min 保持不变
-
-**Verify:** `pnpm test`
-
-**Scope:** M（2 文件）
-
----
-
-#### Task 5.2: AutoRefresh 告警逻辑重构
-
-**Description:** 将 `auto-refresh.ts` 中的告警检测从关联 API Key 改为关联 Quota Source。删除 `alertedKeys` 中的 `apiKey.quotaAlertThreshold` 引用。
-
-**Files:**
-- `src/services/auto-refresh.ts`
-
-**Acceptance:**
-- [ ] 告警检测基于 quota source 的阈值
-- [ ] 不再引用 apiKeys store
-- [ ] 通知消息显示额度源标签
-
-**Verify:** `pnpm build`
-
-**Scope:** M（1 文件）
-
----
-
-### ✅ Checkpoint: Phase 5
-- [ ] 额度查询引擎基于额度源工作
-- [ ] 自动刷新 + 告警正常
-
----
-
-### Phase 6: 额度看板 UI 重构
-
-#### Task 6.1: QuotaBoard 重写
-
-**Description:** 重写 QuotaBoard.vue — 从展示 API Key 的额度改为展示 Quota Source 的额度。
-
-**Files:**
-- `src/views/QuotaBoard.vue` — 重写
-
-**逻辑：**
-- 顶部：标题 + 手动刷新按钮 + "添加额度源"按钮
-- 统计栏：已配置额度源数 / 活跃额度源数 / 告警数
-- 卡片网格：每个额度源一张卡
-  - 显示：额度源类型图标 + 标签 + 启用状态
-  - 三个 QuotaGauge（rolling / weekly / monthly）
-  - 操作按钮：刷新 / 编辑 / 删除
-- 空状态：引导添加第一个额度源
-- 点击卡片 → QuotaSourceDetail
-
-**Acceptance:**
-- [ ] 显示所有已配置额度源的额度
-- [ ] 可手动刷新单个或全部
-- [ ] 空状态有引导
-
-**Verify:** 手动 UI 检查
-
-**Scope:** L（1 文件）
-
----
-
-#### Task 6.2: QuotaDetail 重写
-
-**Description:** 重写 QuotaDetail.vue — 展示单个额度源的详细额度数据和趋势图。
-
-**Files:**
-- `src/views/QuotaDetail.vue` — 重写
-
-**Acceptance:**
-- [ ] 展示额度源信息 + 三窗口详情
-- [ ] 展示 Chart.js 趋势图
-- [ ] 单独刷新按钮
-
-**Verify:** 手动 UI 检查
-
-**Scope:** M（1 文件）
-
----
-
-#### Task 6.3: Dashboard 更新
-
-**Description:** 更新 Dashboard.vue 中的额度告警区域，从引用 apiKeys 改为引用 quotaSources。
-
-**Files:**
-- `src/views/Dashboard.vue`
-
-**Acceptance:**
-- [ ] 额度告警区显示正确的数据
-
-**Verify:** `pnpm build`
-
-**Scope:** S（1 文件）
-
----
-
-### ✅ Checkpoint: Phase 6
-- [ ] 额度看板完整展示额度源
-- [ ] 构建 + 测试通过
-
----
-
-### Phase 7: i18n + 收尾
-
-#### Task 7.1: i18n 翻译更新
-
-**Description:** 增补额度源模块的中英文翻译。
-
-**Files:**
-- `src/i18n/zh-CN.ts` — 新增 `quotaSources` 翻译段
-- `src/i18n/en-US.ts` — 新增 `quotaSources` 翻译段
-- 删除原有的 `apiKeys.alertThreshold` 翻译
-
-**Acceptance:**
-- [ ] 添加额度源弹窗所有文本中英文完整
-- [ ] 额度看板所有文本中英文完整
-- [ ] 设置页无额度相关残留
-
-**Verify:** 手动切换语言检查
-
-**Scope:** S（2 文件）
-
----
-
-#### Task 7.2: 最终验证
-
-**Description:** 全量测试 + 构建 + 人工验收。
-
-**Actions:**
-- [ ] `pnpm test` 全部通过
-- [ ] `pnpm build` 构建成功
-- [ ] 手工检查：添加 API Key（无阈值字段）
-- [ ] 手工检查：添加额度源 → 查询额度 → 展示
-
-**Verify:** `pnpm test && pnpm build`
-
-**Scope:** XS
-
----
-
-### ✅ Checkpoint: Complete
-- [ ] 全部测试通过
-- [ ] 构建成功
-- [ ] 验收通过
-
----
-
-## 依赖关系图
+## Parallelization Strategy
 
 ```
-Phase 1 (类型清理) ───→ Phase 2 (数据层) ───→ Phase 3 (额度源 UI)
-                              │                       │
-                              │                       ▼
-                              │               Phase 4 (适配器)
-                              │                       │
-                              └───────────┬───────────┘
-                                          ▼
-                                  Phase 5 (查询引擎)
-                                          │
-                                          ▼
-                                  Phase 6 (看板 UI)
-                                          │
-                                          ▼
-                                  Phase 7 (i18n + 收尾)
+Round 1 (3 Agents 并行启动):
+  Agent A → Task 0.1 (curl-parser.ts + tests)
+  Agent B → Task 0.2 (types) + Task 2.1 (expiry in checker + store)
+  Agent C → Task 0.3 (Settings cleanup + i18n)
+
+Round 2 (Agent A 完成后启动 2 Agents):
+  Agent A → Task 1.1 (AddQuotaSourceDialog preview)
+         → Task 1.2 (QuotaSourceDetail fix)
+  Agent B → Task 2.2 (CredentialExpiredBanner + QuotaBoard/Detail)
+         → Task 2.3 (auto-refresh auto-disable)
+
+Round 3 (验证):
+  Agent A → pnpm test 全量 + pnpm build
+  Agent A → H5 预览验证
 ```
 
-## 风险评估
+## 任务清单汇总
 
-| 风险 | 等级 | 缓解 |
-|------|------|------|
-| 额度源 API 差异大（与 cc-hud 相同） | 中 | 直接移植 cc-hud 现成代码 |
-| 重构可能破坏现有 API Key 功能 | 高 | 每 Phase 后运行 `pnpm test` |
-| 额度源适配器测试需要 mock 复杂响应 | 中 | 参考现有 provider 测试模式 |
+| # | 任务 | 文件数 | 工作量 | 依赖 |
+|---|------|--------|--------|------|
+| 0.1 | curl-parser.ts + tests | 2 | S | 无 |
+| 0.2 | 类型扩展 | 1 | XS | 无 |
+| 0.3 | Settings 清理 + i18n | 3 | M | 无 |
+| 1.1 | AddQuotaSourceDialog 预览 | 1 | M | 0.1 |
+| 1.2 | QuotaSourceDetail 修复 | 1 | M | 0.1 |
+| 2.1 | 过期检测逻辑 | 3 | M | 0.2 |
+| 2.2 | CredentialExpiredBanner + UI | 3 | M | 2.1 |
+| 2.3 | AutoRefresh 自动禁用 | 1 | S | 2.1 |
 
-## 总结
-
-| Phase | 内容 | 文件数 | 工作量 |
-|-------|------|--------|--------|
-| P1 | 类型清理 + 额度源类型 | 6 | ★★ |
-| P2 | 额度源数据层（repo + store） | 3 | ★★ |
-| P3 | 额度源 UI（弹窗 + 详情 + 路由） | 3 | ★★★ |
-| P4 | 8 个额度源适配器 + 测试 | 18 | ★★★★★ |
-| P5 | QuotaChecker + AutoRefresh 重构 | 3 | ★★★ |
-| P6 | QuotaBoard + QuotaDetail 重写 | 3 | ★★★ |
-| P7 | i18n + 收尾 | 3 | ★ |
+**总计: ~15 文件 | ~8 任务 | 预期 2-3 轮 subagent 执行**

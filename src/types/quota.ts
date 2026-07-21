@@ -54,4 +54,26 @@ export interface IQuotaSourceEntity {
   sortOrder: number
   createdAt: number
   updatedAt: number
+  credentialExpiredAt?: number     // Timestamp when cookie was detected as expired
+  lastCheckSucceeded?: boolean     // Whether the last quota check succeeded
+  lastError?: string               // Last error message from quota check
+}
+
+export interface CurlParseResult {
+  url: string
+  baseUrl: string
+  headers: Record<string, string>
+  cookies: Record<string, string>
+  workspaceId?: string
+  secToken?: string
+}
+
+export interface CurlParseError {
+  code: 'NO_URL' | 'NO_CREDENTIAL' | 'INVALID_FORMAT'
+  message: string
+  userMessage: { zh: string; en: string }
+}
+
+export function isCurlParseError(obj: any): obj is CurlParseError {
+  return obj && typeof obj === 'object' && 'code' in obj && 'userMessage' in obj
 }

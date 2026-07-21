@@ -26,8 +26,14 @@ export async function checkSingleSource(sourceId: string): Promise<void> {
     const result = await adapter.checkQuota(source.encryptedCredential, source.config)
     if (result) {
       quotasStore.updateQuota(`source:${sourceId}`, result)
+      sourcesStore.markCheckResult(sourceId, true)  // mark success
     }
-  } catch {
+  } catch (err) {
+    const message = (err as Error).message || String(err)
+    // Detect 401/Unauthorized → mark as expired
+    if (message.includes('401') || message.toLowerCase().includes('unauthorized')) {
+      sourcesStore.markCheckResult(sourceId, false, message)
+    }
     // Use stale cache if available
     const stale = quotasStore.getStale(`source:${sourceId}`)
     if (!stale) quotasStore.setLoading(`source:${sourceId}`, false)

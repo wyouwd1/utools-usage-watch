@@ -111,6 +111,67 @@ describe('quota-checker', () => {
       expect(quotasStore.quotaMap['source:source-1']?.loading).toBe(false)
     })
 
+    it('should call markCheckResult(true) on successful check', async () => {
+      setupStore([{ id: 'source-1', sourceType: QuotaSourceType.OPENCODE_GO }])
+      const sourcesStore = useQuotaSourcesStore()
+
+      adapter.checkQuotaImpl.mockResolvedValue({
+        monthly: { usedPercent: 80, resetsAt: null, used: 80, total: 100, unit: 'USD' },
+      })
+
+      await checkSingleSource('source-1')
+
+      const source = sourcesStore.sourceList.find(s => s._id === 'quota-source/source-1')
+      expect(source).toBeDefined()
+      expect(source!.lastCheckSucceeded).toBe(true)
+      expect(source!.credentialExpiredAt).toBeUndefined()
+      expect(source!.lastError).toBeUndefined()
+    })
+
+    it('should call markCheckResult(false) on 401 error', async () => {
+      setupStore([{ id: 'source-1', sourceType: QuotaSourceType.OPENCODE_GO }])
+      const sourcesStore = useQuotaSourcesStore()
+
+      adapter.checkQuotaImpl.mockRejectedValue(new Error('401 Unauthorized'))
+
+      await checkSingleSource('source-1')
+
+      const source = sourcesStore.sourceList.find(s => s._id === 'quota-source/source-1')
+      expect(source).toBeDefined()
+      expect(source!.lastCheckSucceeded).toBe(false)
+      expect(source!.credentialExpiredAt).toBeGreaterThan(0)
+      expect(source!.lastError).toContain('401')
+    })
+
+    it('should call markCheckResult(false) on unauthorized error (no 401 code)', async () => {
+      setupStore([{ id: 'source-1', sourceType: QuotaSourceType.OPENCODE_GO }])
+      const sourcesStore = useQuotaSourcesStore()
+
+      adapter.checkQuotaImpl.mockRejectedValue(new Error('unauthorized'))
+
+      await checkSingleSource('source-1')
+
+      const source = sourcesStore.sourceList.find(s => s._id === 'quota-source/source-1')
+      expect(source).toBeDefined()
+      expect(source!.lastCheckSucceeded).toBe(false)
+      expect(source!.credentialExpiredAt).toBeGreaterThan(0)
+      expect(source!.lastError).toContain('unauthorized')
+    })
+
+    it('should NOT mark expired on non-401 errors', async () => {
+      setupStore([{ id: 'source-1', sourceType: QuotaSourceType.OPENCODE_GO }])
+      const sourcesStore = useQuotaSourcesStore()
+
+      adapter.checkQuotaImpl.mockRejectedValue(new Error('Network error'))
+
+      await checkSingleSource('source-1')
+
+      const source = sourcesStore.sourceList.find(s => s._id === 'quota-source/source-1')
+      expect(source).toBeDefined()
+      expect(source!.lastCheckSucceeded).toBeUndefined()
+      expect(source!.credentialExpiredAt).toBeUndefined()
+    })
+
     it('should preserve stale cache on error', async () => {
       setupStore([{ id: 'source-1', sourceType: QuotaSourceType.OPENCODE_GO }])
       const quotasStore = useQuotasStore()
