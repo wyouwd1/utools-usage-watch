@@ -129,7 +129,7 @@ const configValues = ref<Record<string, string>>({})
 const showConfigFields = ref<Record<string, boolean>>({})
 
 	// cURL paste (for OpenCode Go)
-	const showCurlInput = ref(false)
+	const showCurlInput = ref(true)
 	const curlCommand = ref('')
 	const parsedResult = ref<CurlParseResult | null>(null)
 	const parseError = ref<string | null>(null)

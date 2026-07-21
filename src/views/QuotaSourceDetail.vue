@@ -90,7 +90,7 @@ const existingSource = computed(() => {
 })
 
 // cURL paste
-const showCurlInput = ref(false)
+const showCurlInput = ref(true)
 const curlCommand = ref('')
 const parsedResult = ref<CurlParseResult | null>(null)
 const parseError = ref<string | null>(null)
