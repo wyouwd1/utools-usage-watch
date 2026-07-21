@@ -184,6 +184,12 @@ function applyCurlResult(): void {
   const r = parsedResult.value
   baseUrl.value = r.baseUrl
   
+  // Auto-fill label if empty (use source type name)
+  if (!label.value.trim()) {
+    const cfg = sourceTypeConfig[sourceType.value as QuotaSourceType]
+    if (cfg) label.value = cfg.label
+  }
+  
   // Fill credential from cookies
   const cookieEntries = Object.entries(r.cookies)
   if (cookieEntries.length > 0) {
