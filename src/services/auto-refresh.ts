@@ -1,26 +1,16 @@
 import { refreshAll } from './quota-checker'
 import { useQuotasStore } from '@/stores/quotas'
-import { useApiKeysStore } from '@/stores/apiKeys'
 
 /**
- * Singleton scheduler that periodically refreshes quota data for all API keys.
+ * Singleton scheduler that periodically refreshes quota data for all sources.
  * Pauses when the browser tab is hidden (document.visibilitychange) to conserve resources.
- * After each refresh cycle, checks all quota entries against their alert thresholds
- * and triggers notifications for any that exceed the threshold.
+ * After each refresh cycle, updates the lastRefreshAt timestamp.
+ * (Alert notifications will be re-added in a future enhancement.)
  */
 class AutoRefreshScheduler {
   private intervalId: ReturnType<typeof setInterval> | null = null
   private intervalMs = 15 * 60 * 1000 // default 15 minutes
   private isPaused = false
-
-  /**
-   * Tracks alerted keys to avoid duplicate notifications.
-   * Key format: `${apiKeyId}:${threshold}` so threshold changes re-trigger alerts.
-   * Value: timestamp of last alert. Alerts are not repeated within 24 hours.
-   */
-  private alertedKeys = new Map<string, number>()
-
-  private readonly ALERT_COOLDOWN_MS = 24 * 60 * 60 * 1000 // 24 hours
 
   /**
    * Start the auto-refresh scheduler.
@@ -31,12 +21,12 @@ class AutoRefreshScheduler {
     this.intervalMs = intervalMinutes * 60 * 1000
 
     // Run an initial refresh
-    refreshAll().then(() => this.checkAlerts())
+    refreshAll().then(() => this.syncLastRefreshAt())
 
     // Set up periodic refresh
     this.intervalId = setInterval(() => {
       if (!this.isPaused) {
-        refreshAll().then(() => this.checkAlerts())
+        refreshAll().then(() => this.syncLastRefreshAt())
       }
     }, this.intervalMs)
 
@@ -57,69 +47,11 @@ class AutoRefreshScheduler {
   }
 
   /**
-   * Reset the alert tracking state (e.g., when data is re-imported).
+   * Sync the lastRefreshAt timestamp after a refresh cycle.
    */
-  resetAlertState(): void {
-    this.alertedKeys.clear()
-  }
-
-  /**
-   * After a refresh cycle, check all quota entries against thresholds and alert if exceeded.
-   */
-  private checkAlerts(): void {
+  private syncLastRefreshAt(): void {
     const quotasStore = useQuotasStore()
-    const apiKeysStore = useApiKeysStore()
-    const apiKeyList = apiKeysStore.apiKeyList
-
-    for (const entry of quotasStore.lowestQuotas) {
-      const apiKey = apiKeyList.find(k => k._id === `apikey/${entry.apiKeyId}`)
-      if (!apiKey) continue
-
-      const threshold = 20 // TODO: Phase 5 — move to quota source config
-      if (entry.maxPercent <= threshold) continue
-
-      // Check cooldown: same alert not repeated within 24 hours
-      const alertKey = `${entry.apiKeyId}:${threshold}`
-      const lastAlerted = this.alertedKeys.get(alertKey)
-      if (lastAlerted && Date.now() - lastAlerted < this.ALERT_COOLDOWN_MS) continue
-
-      // Mark as alerted
-      this.alertedKeys.set(alertKey, Date.now())
-
-      // Clean up old entries periodically
-      if (this.alertedKeys.size > 100) {
-        this.pruneAlertedKeys()
-      }
-
-      // Trigger notification
-      const message = `[${apiKey.label}] Usage at ${Math.round(entry.maxPercent)}% (threshold: ${threshold}%)`
-      this.showNotification('Quota Alert', message)
-    }
-  }
-
-  /**
-   * Show a notification, falling back to console.log when not in uTools environment.
-   */
-  private showNotification(title: string, message: string): void {
-    const utools = (window as any).utools
-    if (utools?.showNotification) {
-      utools.showNotification(`${title}: ${message}`)
-    } else {
-      // Fallback for development / non-uTools environments
-      console.log(`[${title}] ${message}`)
-    }
-  }
-
-  /**
-   * Remove stale entries from the alerted keys map.
-   */
-  private pruneAlertedKeys(): void {
-    const cutoff = Date.now() - this.ALERT_COOLDOWN_MS
-    for (const [key, timestamp] of this.alertedKeys) {
-      if (timestamp < cutoff) {
-        this.alertedKeys.delete(key)
-      }
-    }
+    quotasStore.lastRefreshAt = Date.now()
   }
 
   private handleVisibilityChange = (): void => {

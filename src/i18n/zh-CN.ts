@@ -32,6 +32,9 @@ export default {
     unitMinutes: '分钟',
     unitHours: '小时',
     seconds: '秒',
+    disabled: '已停用',
+    stale: '数据可能已过期',
+    withData: '有数据',
   },
   keyStatus: {
     active: '正常',

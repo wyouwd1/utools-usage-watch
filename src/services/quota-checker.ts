@@ -1,71 +1,66 @@
-import { adapterRegistry } from './providers/registry'
-import { useApiKeysStore } from '@/stores/apiKeys'
+import { quotaSourceRegistry } from './quota-sources/registry'
+import { useQuotaSourcesStore } from '@/stores/quotaSources'
 import { useQuotasStore } from '@/stores/quotas'
 
 /**
- * Check quota for a single API key.
+ * Check quota for a single quota source.
  * Respects the in-memory cache TTL; if a fresh cache entry exists, the call is a no-op.
- * For force-refresh, call forceRefreshKey() instead.
+ * For force-refresh, call forceRefreshSource() instead.
  */
-export async function checkSingleKey(apiKeyId: string): Promise<void> {
+export async function checkSingleSource(sourceId: string): Promise<void> {
   const quotasStore = useQuotasStore()
-  const apiKeysStore = useApiKeysStore()
+  const sourcesStore = useQuotaSourcesStore()
 
-  // Check in-memory cache TTL first
-  const cached = quotasStore.getCached(apiKeyId)
+  // Check in-memory cache TTL first (keys prefixed with 'source:')
+  const cached = quotasStore.getCached(`source:${sourceId}`)
   if (cached) return
 
-  const apiKey = apiKeysStore.apiKeyList.find(k => k._id === `apikey/${apiKeyId}`)
-  if (!apiKey) return
+  const source = sourcesStore.sourceList.find(s => s._id === `quota-source/${sourceId}`)
+  if (!source) return
 
-  const adapter = adapterRegistry.get(apiKey.provider)
-  if (!adapter || !adapter.info.hasQuota) return
+  const adapter = quotaSourceRegistry.get(source.sourceType)
+  if (!adapter) return
 
-  quotasStore.setLoading(apiKeyId, true)
+  quotasStore.setLoading(`source:${sourceId}`, true)
   try {
-    const result = await adapter.checkQuota(apiKey.encryptedKey, apiKey.baseUrl ?? undefined)
+    const result = await adapter.checkQuota(source.encryptedCredential, source.config)
     if (result) {
-      quotasStore.updateQuota(apiKeyId, result)
+      quotasStore.updateQuota(`source:${sourceId}`, result)
     }
   } catch {
     // Use stale cache if available
-    const stale = quotasStore.getStale(apiKeyId)
-    if (!stale) quotasStore.setLoading(apiKeyId, false)
+    const stale = quotasStore.getStale(`source:${sourceId}`)
+    if (!stale) quotasStore.setLoading(`source:${sourceId}`, false)
   } finally {
-    quotasStore.setLoading(apiKeyId, false)
+    quotasStore.setLoading(`source:${sourceId}`, false)
   }
 }
 
 /**
- * Refresh quota for all active keys that support quota checking.
+ * Refresh quota for all enabled quota sources.
  * Runs all checks concurrently via Promise.allSettled.
  */
 export async function refreshAll(): Promise<void> {
-  const apiKeysStore = useApiKeysStore()
+  const sourcesStore = useQuotaSourcesStore()
   const quotasStore = useQuotasStore()
   quotasStore.refreshing = true
 
-  const promises = apiKeysStore.activeKeys
-    .filter(k => {
-      const adapter = adapterRegistry.get(k.provider)
-      return adapter?.info.hasQuota
-    })
-    .map(k => {
-      const id = k._id.replace('apikey/', '')
-      return checkSingleKey(id)
-    })
+  const promises = sourcesStore.enabledSources.map(s => {
+    const id = s._id.replace('quota-source/', '')
+    return checkSingleSource(id)
+  })
   await Promise.allSettled(promises)
   quotasStore.refreshing = false
 }
 
 /**
- * Force-refresh quota for a single key by invalidating its cache first.
+ * Force-refresh quota for a single source by invalidating its cache first.
  */
-export async function forceRefreshKey(apiKeyId: string): Promise<void> {
+export async function forceRefreshSource(sourceId: string): Promise<void> {
   const quotasStore = useQuotasStore()
   // Invalidate cache so getCached() returns null on the next call
-  if (quotasStore.quotaMap[apiKeyId]) {
-    quotasStore.quotaMap[apiKeyId].fetchedAt = 0
+  if (quotasStore.quotaMap[`source:${sourceId}`]) {
+    quotasStore.quotaMap[`source:${sourceId}`].fetchedAt = 0
   }
-  await checkSingleKey(apiKeyId)
+  await checkSingleSource(sourceId)
 }

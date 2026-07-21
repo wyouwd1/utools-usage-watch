@@ -112,10 +112,10 @@ describe('quotas store', () => {
       const store = useQuotasStore()
       store.updateQuota('key-1', { monthly: { usedPercent: 10, resetsAt: null, used: 10, total: 100, unit: 'USD' } })
       store.updateQuota('key-2', { weekly: { usedPercent: 50, resetsAt: null, used: 50, total: 100, unit: 'USD' } })
-      expect(store.cachedKeyIds.length).toBe(2)
+      expect(store.cachedItemIds.length).toBe(2)
 
       store.clearCache()
-      expect(store.cachedKeyIds.length).toBe(0)
+      expect(store.cachedItemIds.length).toBe(0)
       expect(store.getHistory('key-1').length).toBe(0)
       expect(store.lastRefreshAt).toBeNull()
     })
@@ -137,10 +137,10 @@ describe('quotas store', () => {
 
       const sorted = store.lowestQuotas
       expect(sorted.length).toBe(3)
-      expect(sorted[0].apiKeyId).toBe('key-high')
+      expect(sorted[0].itemId).toBe('key-high')
       expect(sorted[0].maxPercent).toBe(90)
-      expect(sorted[1].apiKeyId).toBe('key-mid')
-      expect(sorted[2].apiKeyId).toBe('key-low')
+      expect(sorted[1].itemId).toBe('key-mid')
+      expect(sorted[2].itemId).toBe('key-low')
     })
 
     it('should pick the max percent across all windows', () => {
@@ -161,7 +161,7 @@ describe('quotas store', () => {
 
       const sorted = store.lowestQuotas
       expect(sorted.length).toBe(1)
-      expect(sorted[0].apiKeyId).toBe('key-1')
+      expect(sorted[0].itemId).toBe('key-1')
     })
   })
 })

@@ -11,21 +11,21 @@ export const useQuotasStore = defineStore('quotas', () => {
   const lastRefreshAt = ref<number | null>(null)
   const refreshing = ref(false)
 
-  const cachedKeyIds = computed(() => Object.keys(quotaMap.value))
+  const cachedItemIds = computed(() => Object.keys(quotaMap.value))
 
-  function getCached(apiKeyId: string): IQuotaCacheEntry | null {
-    const entry = quotaMap.value[apiKeyId]
+  function getCached(itemId: string): IQuotaCacheEntry | null {
+    const entry = quotaMap.value[itemId]
     if (!entry) return null
     if (Date.now() - entry.fetchedAt < CACHE_TTL) return entry
     return null // expired
   }
 
-  function getStale(apiKeyId: string): IQuotaCacheEntry | null {
-    return quotaMap.value[apiKeyId] ?? null
+  function getStale(itemId: string): IQuotaCacheEntry | null {
+    return quotaMap.value[itemId] ?? null
   }
 
-  function updateQuota(apiKeyId: string, windows: IQuotaWindows): void {
-    quotaMap.value[apiKeyId] = {
+  function updateQuota(itemId: string, windows: IQuotaWindows): void {
+    quotaMap.value[itemId] = {
       windows,
       fetchedAt: Date.now(),
       loading: false,
@@ -33,26 +33,26 @@ export const useQuotasStore = defineStore('quotas', () => {
     // Record history
     const windowsToRecord = [windows.rolling, windows.weekly, windows.monthly].find(w => w != null)
     if (windowsToRecord) {
-      if (!historyMap.value[apiKeyId]) historyMap.value[apiKeyId] = []
-      historyMap.value[apiKeyId].push({
-        apiKeyId,
+      if (!historyMap.value[itemId]) historyMap.value[itemId] = []
+      historyMap.value[itemId].push({
+        itemId,
         usedPercent: windowsToRecord.usedPercent,
         recordedAt: Date.now(),
         source: 'manual',
       })
-      // Keep only last 100 entries per key
-      if (historyMap.value[apiKeyId].length > 100) {
-        historyMap.value[apiKeyId] = historyMap.value[apiKeyId].slice(-100)
+      // Keep only last 100 entries per item
+      if (historyMap.value[itemId].length > 100) {
+        historyMap.value[itemId] = historyMap.value[itemId].slice(-100)
       }
     }
     lastRefreshAt.value = Date.now()
   }
 
-  function setLoading(apiKeyId: string, loading: boolean): void {
-    if (!quotaMap.value[apiKeyId]) {
-      quotaMap.value[apiKeyId] = { windows: {}, fetchedAt: 0, loading }
+  function setLoading(itemId: string, loading: boolean): void {
+    if (!quotaMap.value[itemId]) {
+      quotaMap.value[itemId] = { windows: {}, fetchedAt: 0, loading }
     } else {
-      quotaMap.value[apiKeyId].loading = loading
+      quotaMap.value[itemId].loading = loading
     }
   }
 
@@ -62,8 +62,8 @@ export const useQuotasStore = defineStore('quotas', () => {
     lastRefreshAt.value = null
   }
 
-  function getHistory(apiKeyId: string): IQuotaHistoryEntry[] {
-    return historyMap.value[apiKeyId] ?? []
+  function getHistory(itemId: string): IQuotaHistoryEntry[] {
+    return historyMap.value[itemId] ?? []
   }
 
   const lowestQuotas = computed(() => {
@@ -72,14 +72,14 @@ export const useQuotasStore = defineStore('quotas', () => {
       .map(([id, entry]) => {
         const all = [entry.windows.rolling, entry.windows.weekly, entry.windows.monthly].filter(w => w != null)
         const maxPercent = all.length > 0 ? Math.max(...all.map(w => w!.usedPercent)) : 0
-        return { apiKeyId: id, maxPercent }
+        return { itemId: id, maxPercent }
       })
       .sort((a, b) => b.maxPercent - a.maxPercent)
   })
 
   return {
     quotaMap, historyMap, lastRefreshAt, refreshing,
-    cachedKeyIds,
+    cachedItemIds,
     getCached, getStale, updateQuota, setLoading, clearCache,
     getHistory, lowestQuotas,
   }

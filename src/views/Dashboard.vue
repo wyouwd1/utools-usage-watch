@@ -3,8 +3,9 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useApiKeysStore } from '@/stores/apiKeys'
+import { useQuotaSourcesStore } from '@/stores/quotaSources'
 import { useQuotasStore } from '@/stores/quotas'
-import { useProvidersStore } from '@/stores/providers'
+import { ProviderType } from '@/types'
 import { refreshAll } from '@/services/quota-checker'
 import ProviderIcon from '@/components/ProviderIcon.vue'
 import KeyStatusBadge from '@/components/KeyStatusBadge.vue'
@@ -13,13 +14,25 @@ import QuotaGauge from '@/components/QuotaGauge.vue'
 const { t } = useI18n()
 const router = useRouter()
 const apiKeysStore = useApiKeysStore()
+const quotaSourcesStore = useQuotaSourcesStore()
 const quotasStore = useQuotasStore()
-const providersStore = useProvidersStore()
 
 const totalKeys = computed(() => apiKeysStore.apiKeyList.length)
 const activeKeysCount = computed(() => apiKeysStore.activeKeys.length)
 
-// Keys in alert: keys with usage > 80% from lowestQuotas
+// Emoji map for source types
+const sourceTypeIcons: Record<string, string> = {
+  'opencode-go': '\uD83D\uDD13',
+  'bailian': '\u2601\uFE0F',
+  'deepseek': '\uD83D\uDD2E',
+  'moonshot': '\uD83C\uDF19',
+  'groq': '\u26A1',
+  'qwen': '\uD83C\uDF10',
+  'glm': '\uD83D\uDCA0',
+  'minimax': '\uD83E\uDD16',
+}
+
+// Keys in alert: items with usage > 80% from lowestQuotas
 const alertKeysCount = computed(() => {
   return quotasStore.lowestQuotas.filter(item => item.maxPercent > 80).length
 })
@@ -32,18 +45,43 @@ const recentTests = computed(() => {
     .slice(0, 5)
 })
 
-// Quota alerts: keys with highest usage percent from quotas store
+// Quota alerts: items with highest usage percent from quotas store
+// Supports both API keys (plain id) and quota sources (source:xxx)
 const quotaAlerts = computed(() => {
-  const alerts: { apiKeyId: string; label: string; provider: import('@/types').ProviderType; usedPercent: number }[] = []
+  type AlertItem = { itemId: string; label: string; icon: string; usedPercent: number; route: string }
+  const alerts: AlertItem[] = []
   const keyMap = new Map(apiKeysStore.apiKeyList.map(k => [k._id.replace('apikey/', ''), k]))
+  const sourceMap = new Map(quotaSourcesStore.sourceList.map(s => [s._id.replace('quota-source/', ''), s]))
+
   for (const item of quotasStore.lowestQuotas) {
-    const apiKey = keyMap.get(item.apiKeyId)
-    if (apiKey) {
+    let label = 'Unknown'
+    let icon = '\uD83D\uDD14'
+    let route = ''
+
+    if (item.itemId.startsWith('source:')) {
+      const sourceId = item.itemId.replace('source:', '')
+      const src = sourceMap.get(sourceId)
+      if (src) {
+        label = src.label
+        icon = sourceTypeIcons[src.sourceType] ?? '\uD83D\uDD14'
+        route = `/quota/${sourceId}`
+      }
+    } else {
+      const apiKey = keyMap.get(item.itemId)
+      if (apiKey) {
+        label = apiKey.label
+        icon = ''
+        route = `/quota/${item.itemId}`
+      }
+    }
+
+    if (route) {
       alerts.push({
-        apiKeyId: item.apiKeyId,
-        label: apiKey.label,
-        provider: apiKey.provider,
+        itemId: item.itemId,
+        label,
+        icon,
         usedPercent: item.maxPercent,
+        route,
       })
     }
   }
@@ -158,12 +196,13 @@ async function handleRefreshAll() {
       <div v-if="quotaAlerts.length > 0" class="divide-y divide-gray-50">
         <div
           v-for="alert in quotaAlerts"
-          :key="alert.apiKeyId"
+          :key="alert.itemId"
           class="px-5 py-3 hover:bg-gray-50 cursor-pointer transition-colors"
-          @click="goTo(`/quota/${alert.apiKeyId}`)"
+          @click="goTo(alert.route)"
         >
           <div class="flex items-center gap-3 mb-1">
-            <ProviderIcon :provider="alert.provider" size="sm" />
+            <span v-if="alert.icon" class="text-lg">{{ alert.icon }}</span>
+            <ProviderIcon v-else :provider="ProviderType.CUSTOM" size="sm" />
             <span class="text-sm font-medium text-gray-800 truncate">{{ alert.label }}</span>
             <span v-if="alert.usedPercent > 80" class="text-xs font-bold text-red-500 ml-auto">{{ alert.usedPercent }}%</span>
             <span v-else-if="alert.usedPercent > 50" class="text-xs font-bold text-yellow-600 ml-auto">{{ alert.usedPercent }}%</span>

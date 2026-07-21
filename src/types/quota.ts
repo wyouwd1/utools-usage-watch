@@ -21,7 +21,7 @@ export interface IQuotaCacheEntry {
 }
 
 export interface IQuotaHistoryEntry {
-  apiKeyId: string
+  itemId: string
   usedPercent: number
   recordedAt: number
   source: 'auto' | 'manual'

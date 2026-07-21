@@ -161,11 +161,9 @@ function handleImport(event: Event) {
         }
       }
 
-      // Reload the API keys list
-      await apiKeysStore.fetchAll()
+	      // Reload the API keys list
+	      await apiKeysStore.fetchAll()
 
-      // Reset alert state in the scheduler
-      autoRefreshScheduler.resetAlertState()
 
       importStatus.value = 'success'
       setTimeout(() => { importStatus.value = null }, 3000)

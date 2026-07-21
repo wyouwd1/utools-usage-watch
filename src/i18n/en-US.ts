@@ -32,6 +32,9 @@ export default {
     unitMinutes: 'min',
     unitHours: 'h',
     seconds: 's',
+    disabled: 'Disabled',
+    stale: 'Stale data',
+    withData: 'with data',
   },
   keyStatus: {
     active: 'Active',
