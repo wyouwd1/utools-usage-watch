@@ -98,6 +98,10 @@ export default {
     baseUrl: 'Base URL',
     enabled: 'Enabled',
     keepExistingCredential: 'Leave empty to keep the existing credential',
+    howToGet: 'How to get credentials',
+    pasteCurl: 'Paste cURL to auto-parse',
+    curlPlaceholder: 'Paste the cURL command from browser DevTools Network tab...',
+    parseCurl: 'Parse cURL',
     placeholder: {
       label: 'e.g. My Bailian Account',
       credential: 'Enter credential',

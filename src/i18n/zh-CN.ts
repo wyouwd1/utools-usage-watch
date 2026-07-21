@@ -98,6 +98,10 @@ export default {
     baseUrl: 'Base URL',
     enabled: '启用',
     keepExistingCredential: '留空以保留现有凭证',
+    howToGet: '获取凭证指引',
+    pasteCurl: '粘贴 cURL 自动解析',
+    curlPlaceholder: '从浏览器开发者工具 Network 标签页复制的 cURL 命令...',
+    parseCurl: '解析 cURL',
     placeholder: {
       label: '例如：我的百炼账号',
       credential: '输入凭证',

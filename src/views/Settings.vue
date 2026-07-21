@@ -228,20 +228,20 @@ function handleReset() {
       <p class="text-xs text-gray-400 mb-3">{{ t('settings.alertThresholdDescription') }}</p>
       <div class="max-w-xs">
         <div class="flex items-center justify-between mb-1">
-          <span class="text-sm text-gray-600">{{ t('apiKeys.alertThreshold') }}</span>
+          <span class="text-sm text-gray-600">{{ t('settings.alertThresholdLabel') }}</span>
           <span class="text-sm font-semibold text-blue-600">{{ alertThresholdModel }}%</span>
         </div>
         <input
           v-model.number="alertThresholdModel"
           type="range"
-          min="10"
-          max="50"
+          min="0"
+          max="100"
           step="5"
           class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
         />
         <div class="flex justify-between text-xs text-gray-400 mt-1">
-          <span>10%</span>
-          <span>50%</span>
+          <span>0%</span>
+          <span>100%</span>
         </div>
       </div>
     </section>

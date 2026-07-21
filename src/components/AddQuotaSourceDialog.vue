@@ -12,17 +12,31 @@ const emit = defineEmits<{
   saved: []
 }>()
 
-// Source type config: default base URLs and extra config fields
+// Source type config: default base URLs, extra config fields, and guidance
 const sourceTypeConfig: Record<
   QuotaSourceType,
-  { label: string; defaultBaseUrl: string; configFields?: { key: string; label: string; type: 'text' | 'password'; required?: boolean }[] }
+  {
+    label: string
+    defaultBaseUrl: string
+    configFields?: { key: string; label: string; type: 'text' | 'password'; required?: boolean }[]
+    guide?: string[]  // Step-by-step guidance for getting credentials
+    curlHint?: boolean // Whether to show "Paste cURL" option
+  }
 > = {
   [QuotaSourceType.OPENCODE_GO]: {
     label: 'OpenCode Go',
-    defaultBaseUrl: 'https://api.opencode-go.com',
+    defaultBaseUrl: 'https://opencode.ai',
     configFields: [
-      { key: 'sec_token', label: 'SEC Token', type: 'password', required: true },
-      { key: 'region', label: 'Region', type: 'text' },
+      { key: 'workspaceId', label: 'Workspace ID', type: 'text', required: false },
+    ],
+    curlHint: true,
+    guide: [
+      '1. 在浏览器中登录 https://opencode.ai 并打开你的 Workspace',
+      '2. 按 F12 打开开发者工具 → Network（网络）标签',
+      '3. 刷新页面，找到第一个 workspace 请求（URL 含 /workspace/）',
+      '4. 右键该请求 → Copy → Copy as cURL',
+      '5. 回到这里，点击下方「粘贴 cURL」自动提取凭证',
+      '6. 或者手动从 Cookie 请求头中提取 auth 值填入上方凭证框',
     ],
   },
   [QuotaSourceType.BAILIAN]: {
@@ -30,32 +44,74 @@ const sourceTypeConfig: Record<
     defaultBaseUrl: 'https://dashscope.aliyuncs.com',
     configFields: [
       { key: 'sec_token', label: 'SEC Token', type: 'password', required: true },
-      { key: 'region', label: 'Region', type: 'text' },
+      { key: 'region', label: 'Region', type: 'text', required: false },
+    ],
+    guide: [
+      '1. 登录阿里云百炼控制台 → 模型部署 → Coding Plan',
+      '2. 按 F12 打开开发者工具 → Network 标签',
+      '3. 找到请求中的 cookie 和 sec_token 参数',
+      '4. 将 cookie 值填入上方凭证框，sec_token 填入下方',
     ],
   },
   [QuotaSourceType.DEEPSEEK]: {
     label: 'DeepSeek',
     defaultBaseUrl: 'https://api.deepseek.com',
+    guide: [
+      '1. 登录 https://platform.deepseek.com',
+      '2. 进入 API Keys 页面',
+      '3. 创建或复制你的 API Key',
+      '4. 将 API Key 粘贴到上方凭证框',
+    ],
   },
   [QuotaSourceType.MOONSHOT]: {
     label: 'Moonshot',
     defaultBaseUrl: 'https://api.moonshot.cn',
+    guide: [
+      '1. 登录 https://platform.moonshot.cn',
+      '2. 进入 API Keys 管理',
+      '3. 创建或复制 API Key',
+      '4. 将 API Key 粘贴到上方凭证框',
+    ],
   },
   [QuotaSourceType.GROQ]: {
     label: 'Groq',
     defaultBaseUrl: 'https://api.groq.com',
+    guide: [
+      '1. 登录 https://console.groq.com',
+      '2. 进入 API Keys 页面',
+      '3. 创建或复制 API Key',
+      '4. 将 API Key 粘贴到上方凭证框',
+    ],
   },
   [QuotaSourceType.QWEN]: {
     label: 'Qwen (DashScope)',
     defaultBaseUrl: 'https://dashscope.aliyuncs.com',
+    guide: [
+      '1. 登录 https://dashscope.aliyun.com',
+      '2. 进入 API Key 管理',
+      '3. 创建或复制你的 API Key',
+      '4. 将 API Key 粘贴到上方凭证框',
+    ],
   },
   [QuotaSourceType.GLM]: {
     label: 'GLM (BigModel)',
     defaultBaseUrl: 'https://open.bigmodel.cn',
+    guide: [
+      '1. 登录 https://open.bigmodel.cn',
+      '2. 进入 API Keys 管理',
+      '3. 创建或复制 API Key',
+      '4. 将 API Key 粘贴到上方凭证框',
+    ],
   },
   [QuotaSourceType.MINIMAX]: {
     label: 'MiniMax',
     defaultBaseUrl: 'https://api.minimax.chat',
+    guide: [
+      '1. 登录 https://platform.minimaxi.com',
+      '2. 进入 API Keys 管理',
+      '3. 创建或复制 Group ID / API Key',
+      '4. 将凭证粘贴到上方凭证框',
+    ],
   },
 }
 
@@ -69,6 +125,10 @@ const baseUrl = ref('')
 // Config fields (dynamic per source type)
 const configValues = ref<Record<string, string>>({})
 const showConfigFields = ref<Record<string, boolean>>({})
+
+// cURL paste (for OpenCode Go)
+const showCurlInput = ref(false)
+const curlCommand = ref('')
 
 // UI state
 const saving = ref(false)
@@ -90,18 +150,57 @@ const sourceTypeOptions = computed(() => {
   }))
 })
 
+const selectedGuide = computed(() => {
+  if (!sourceType.value) return null
+  return sourceTypeConfig[sourceType.value]?.guide ?? null
+})
+
+const hasCurlHint = computed(() => {
+  if (!sourceType.value) return false
+  return sourceTypeConfig[sourceType.value]?.curlHint ?? false
+})
+
 watch(sourceType, (val) => {
   if (val) {
     const cfg = sourceTypeConfig[val]
     baseUrl.value = cfg.defaultBaseUrl
     configValues.value = {}
     showConfigFields.value = {}
+    showCurlInput.value = false
+    curlCommand.value = ''
   } else {
     baseUrl.value = ''
     configValues.value = {}
     showConfigFields.value = {}
+    showCurlInput.value = false
+    curlCommand.value = ''
   }
 })
+
+/** Parse a cURL command to extract auth cookie and base URL */
+function parseCurl(curl: string): void {
+  // Extract URL
+  const urlMatch = curl.match(/curl\s+['"]?([^'"\s]+)/)
+  if (urlMatch) {
+    const url = urlMatch[1].replace(/\/$/, '')
+    // Extract base URL (protocol + host)
+    const baseMatch = url.match(/(https?:\/\/[^\/]+)/)
+    if (baseMatch) baseUrl.value = baseMatch[1]
+    // Extract workspace ID from path
+    const wsMatch = url.match(/\/workspace\/([^\/\s?]+)/)
+    if (wsMatch) configValues.value['workspaceId'] = wsMatch[1]
+  }
+  // Extract Cookie header
+  const cookieMatch = curl.match(/['"]?Cookie['"]?:\s*['"]([^'"]+)['"]/)
+  if (cookieMatch) {
+    credential.value = cookieMatch[1]
+  }
+  // Also try -H "cookie: ..."
+  const hCookieMatch = curl.match(/-H\s+['"]cookie:\s*([^'"]+)['"]/i)
+  if (hCookieMatch && !cookieMatch) {
+    credential.value = hCookieMatch[1]
+  }
+}
 
 function isFormValid(): boolean {
   if (!sourceType.value) return false
@@ -263,6 +362,42 @@ async function handleSave() {
               </button>
             </div>
           </div>
+        </div>
+
+        <!-- cURL paste (OpenCode Go) -->
+        <div v-if="hasCurlHint">
+          <button
+            type="button"
+            @click="showCurlInput = !showCurlInput"
+            class="text-sm text-blue-600 hover:text-blue-700 font-medium"
+          >
+            {{ showCurlInput ? '− ' : '+ ' }}{{ t('quotaSources.pasteCurl') }}
+          </button>
+          <div v-if="showCurlInput" class="mt-2 space-y-2">
+            <textarea
+              v-model="curlCommand"
+              rows="4"
+              class="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              :placeholder="t('quotaSources.curlPlaceholder')"
+            ></textarea>
+            <button
+              type="button"
+              @click="parseCurl(curlCommand)"
+              class="px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
+            >
+              {{ t('quotaSources.parseCurl') }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Getting credentials guide -->
+        <div v-if="selectedGuide" class="bg-blue-50 rounded-lg px-4 py-3">
+          <p class="text-xs font-medium text-blue-700 mb-1.5">{{ t('quotaSources.howToGet') }}</p>
+          <ol class="list-decimal list-inside text-xs text-blue-600 space-y-1">
+            <li v-for="(step, i) in selectedGuide" :key="i" class="text-blue-700/80">
+              {{ step }}
+            </li>
+          </ol>
         </div>
 
         <!-- Error message -->
