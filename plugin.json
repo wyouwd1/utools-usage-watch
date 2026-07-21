@@ -12,6 +12,9 @@
     "single": true,
     "height": 600
   },
+  "development": {
+    "main": "http://localhost:5173"
+  },
   "features": [
     {
       "code": "aw",
