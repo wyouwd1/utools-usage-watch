@@ -1,6 +1,10 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
+
+// Must be imported early: monkey-patches global fetch for CORS proxy in H5 dev mode
+import './utils/fetch'
+
 import App from './App.vue'
 import router from './router'
 import zhCN from './i18n/zh-CN'
