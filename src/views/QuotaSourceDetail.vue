@@ -340,7 +340,7 @@ async function handleSave() {
           :disabled="!isNew"
           class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white disabled:bg-gray-50 disabled:text-gray-500"
         >
-          <option value="" disabled>{{ t('common.loading') }}</option>
+          <option value="" disabled>{{ t('common.pleaseSelect') }}</option>
           <option
             v-for="opt in sourceTypeOptions"
             :key="opt.value"

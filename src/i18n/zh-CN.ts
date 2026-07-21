@@ -16,6 +16,7 @@ export default {
     cancel: '取消',
     confirm: '确认',
     search: '搜索',
+    pleaseSelect: '请选择',
     loading: '加载中...',
     noData: '暂无数据',
     refresh: '刷新',

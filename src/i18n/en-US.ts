@@ -16,6 +16,7 @@ export default {
     cancel: 'Cancel',
     confirm: 'Confirm',
     search: 'Search',
+    pleaseSelect: 'Please select',
     loading: 'Loading...',
     noData: 'No data',
     refresh: 'Refresh',
