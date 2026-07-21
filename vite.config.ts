@@ -55,14 +55,22 @@ function corsProxyPlugin(): Plugin {
             signal: AbortSignal.timeout(10000),
           })
 
-          // Copy response headers (except CORS-restricted ones)
+          // Copy response headers (except ones that conflict with proxying)
+          const skipHeaders = new Set([
+            'access-control-allow-origin',
+            'access-control-allow-methods',
+            'content-security-policy',
+            'content-encoding',   // body is already decompressed by Node fetch
+            'content-length',     // length changes after decompression
+            'transfer-encoding',
+          ])
           const corsHeaders: Record<string, string> = {
             'access-control-allow-origin': '*',
             'access-control-allow-methods': 'GET, POST, OPTIONS',
             'access-control-allow-headers': '*',
           }
           for (const [key, value] of response.headers.entries()) {
-            if (!['access-control-allow-origin', 'access-control-allow-methods', 'content-security-policy'].includes(key.toLowerCase())) {
+            if (!skipHeaders.has(key.toLowerCase())) {
               corsHeaders[key] = value
             }
           }
