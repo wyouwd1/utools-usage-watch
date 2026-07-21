@@ -62,7 +62,7 @@ const sourceTypeConfig: Record<
 }
 
 // Form state
-const sourceType = ref<QuotaSourceType | ''>('')
+const sourceType = ref<QuotaSourceType | ''>(isNew.value ? QuotaSourceType.OPENCODE_GO : '')
 const label = ref('')
 const credential = ref('')
 const showCredential = ref(false)
@@ -94,7 +94,6 @@ const showCurlInput = ref(true)
 const curlCommand = ref('')
 const parsedResult = ref<CurlParseResult | null>(null)
 const parseError = ref<string | null>(null)
-const showPreview = ref(false)
 
 const selectedConfig = computed(() => {
   if (!sourceType.value) return null
@@ -169,7 +168,7 @@ watch(sourceType, (val) => {
   }
 })
 
-function handleParseCurl(): void {
+async function handleParseCurl(): Promise<void> {
   parseError.value = null
   parsedResult.value = null
   showPreview.value = false
@@ -180,8 +179,14 @@ function handleParseCurl(): void {
     return
   }
   
+  // Auto-apply the parsed result immediately (no preview/confirm step)
   parsedResult.value = result
-  showPreview.value = true
+  applyCurlResult()
+  
+  // Auto-save for new sources if all required fields are filled
+  if (isNew.value && isFormValid()) {
+    await handleSave()
+  }
 }
 
 function applyCurlResult(): void {
@@ -220,34 +225,9 @@ function applyCurlResult(): void {
     configValues.value['sec_token'] = r.secToken
   }
   
-  showPreview.value = false
   parsedResult.value = null
   // Keep curlCommand.value so it can be saved as curlRaw
   showCurlInput.value = false
-}
-
-function cancelPreview(): void {
-  showPreview.value = false
-  parsedResult.value = null
-}
-
-function getCredentialFromResult(): string {
-  if (!parsedResult.value) return ''
-  // For OpenCode Go, extract the 'auth' cookie value
-  if (sourceType.value === QuotaSourceType.OPENCODE_GO) {
-    return parsedResult.value.cookies['auth'] ?? parsedResult.value.cookies['session'] ?? ''
-  }
-  // For others (Bailian), use the full cookie header value
-  const cookieHeader = Object.entries(parsedResult.value.headers)
-    .find(([k]) => k.toLowerCase() === 'cookie')
-  if (cookieHeader) return cookieHeader[1]
-  return Object.entries(parsedResult.value.cookies)
-    .map(([k, v]) => `${k}=${v}`).join('; ')
-}
-
-function maskCredential(cred: string): string {
-  if (!cred || cred.length < 8) return cred
-  return cred.slice(0, 4) + '****' + cred.slice(-4)
 }
 
 function isFormValid(): boolean {
@@ -449,49 +429,9 @@ async function handleSave() {
           <p v-if="parseError" class="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">
             {{ parseError }}
           </p>
-          
-          <!-- Preview section -->
-          <div v-if="showPreview && parsedResult" class="bg-gray-50 rounded-lg border border-gray-200 p-3 space-y-1.5">
-            <p class="text-xs font-medium text-gray-700 mb-2">{{ t('quotaSources.parseResult') }}</p>
-            
-            <div class="flex items-center gap-2 text-xs">
-              <span class="text-green-600">✅</span>
-              <span class="text-gray-500 w-20">{{ t('quotaSources.baseUrl') }}:</span>
-              <span class="text-gray-800 font-mono">{{ parsedResult.baseUrl }}</span>
-            </div>
-            
-            <div class="flex items-center gap-2 text-xs">
-              <span class="text-green-600">✅</span>
-              <span class="text-gray-500 w-20">{{ t('quotaSources.credential') }}:</span>
-              <span class="text-gray-800 font-mono">{{ maskCredential(getCredentialFromResult()) }}</span>
-            </div>
-            
-            <div v-if="parsedResult.workspaceId" class="flex items-center gap-2 text-xs">
-              <span class="text-green-600">✅</span>
-              <span class="text-gray-500 w-20">Workspace ID:</span>
-              <span class="text-gray-800 font-mono">{{ parsedResult.workspaceId }}</span>
-            </div>
-            
-            <div class="flex items-center justify-end gap-2 mt-3 pt-2 border-t border-gray-200">
-              <button
-                type="button"
-                @click="cancelPreview"
-                class="px-2.5 py-1 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded hover:bg-gray-50 transition-colors"
-              >
-                {{ t('common.cancel') }}
-              </button>
-              <button
-                type="button"
-                @click="applyCurlResult"
-                class="px-2.5 py-1 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors"
-              >
-                {{ t('quotaSources.confirmFill') }}
-              </button>
-            </div>
-          </div>
-        </div>
+	        </div>
 
-        <!-- Switch to manual mode -->
+	        <!-- Switch to manual mode -->
         <div class="text-center pt-2">
           <button
             type="button"
