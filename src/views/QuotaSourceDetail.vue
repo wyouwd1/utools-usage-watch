@@ -263,7 +263,7 @@ async function handleSave() {
       sourceType: sourceType.value as QuotaSourceType,
       label: label.value.trim(),
       baseUrl: baseUrl.value.trim() || undefined,
-      config: configValues.value,
+      config: { ...configValues.value },
       enabled: enabled.value,
     }
 

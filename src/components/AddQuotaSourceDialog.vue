@@ -283,7 +283,7 @@ async function handleSave() {
       label: label.value.trim(),
       credential: credential.value.trim(),
       baseUrl: baseUrl.value.trim() || undefined,
-      config: configValues.value,
+      config: { ...configValues.value },
       enabled: true,
       sortOrder: Date.now(),
     })
