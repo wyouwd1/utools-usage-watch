@@ -176,80 +176,82 @@ function getCacheEntry(sourceId: string) {
       </div>
     </div>
 
-	    <!-- Source cards grid -->
-	    <div v-if="quotaSourcesStore.sourceList.length > 0" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-	      <div
-	        v-for="source in quotaSourcesStore.sourceList"
-	        :key="source._id"
-	        @click="goToSourceDetail(source._id.replace('quota-source/', ''))"
-	        class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md hover:border-gray-200 transition-all cursor-pointer"
-	        :class="{ 'opacity-60': isExpired(source) }"
-	      >
-	        <!-- Card header -->
-	        <div class="flex items-center justify-between mb-3">
-	          <div class="flex items-center gap-2 min-w-0">
-	            <span class="text-xl" :title="source.sourceType">{{ sourceIcon(source.sourceType) }}</span>
-          <span class="text-sm font-medium text-gray-800 truncate">{{ source.label }}</span>
-            <span v-if="isExpired(source)" class="text-amber-500 text-xs" title="凭证已过期">⚠️</span>
-            <button
-              @click.stop="goToEditSource(source._id.replace('quota-source/', ''))"
-              class="ml-1 text-gray-300 hover:text-gray-600 transition-colors text-xs"
-              :title="t('common.edit')"
-            >
-              ✏️
-            </button>
+		    <!-- Source cards grid -->
+		    <div v-if="quotaSourcesStore.sourceList.length > 0" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+		      <div
+		        v-for="source in quotaSourcesStore.sourceList"
+		        :key="source._id"
+		        @click="goToSourceDetail(source._id.replace('quota-source/', ''))"
+		        class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md hover:border-gray-200 transition-all cursor-pointer"
+		        :class="{ 'opacity-60': isExpired(source) }"
+		      >
+		        <!-- Card header -->
+		        <div class="flex items-center justify-between mb-2">
+		          <div class="flex items-center gap-1.5 min-w-0">
+		            <span class="text-base" :title="source.sourceType">{{ sourceIcon(source.sourceType) }}</span>
+	          <span class="text-sm font-medium text-gray-800 truncate">{{ source.label }}</span>
+	            <span v-if="isExpired(source)" class="text-amber-500 text-xs" title="凭证已过期">⚠️</span>
+	            <button
+	              @click.stop="goToEditSource(source._id.replace('quota-source/', ''))"
+	              class="text-gray-300 hover:text-gray-600 transition-colors text-xs"
+	              :title="t('common.edit')"
+	            >
+	              ✏️
+	            </button>
+		          </div>
+	          <span
+	            v-if="source.enabled"
+	            class="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium"
+	          >
+	            {{ t('quotaSources.enabled') }}
+	          </span>
+	          <span
+	            v-else
+	            class="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-medium"
+	          >
+	            {{ t('common.disabled') }}
+	          </span>
+	        </div>
+	
+	        <!-- Outdated indicator -->
+	        <div
+	          v-if="isCacheOutdated(source._id.replace('quota-source/', ''))"
+	          class="text-xs text-orange-500 mb-1.5 flex items-center gap-1"
+	        >
+	          <span>\u26A0\uFE0F</span>
+	          <span>{{ t('common.stale') }}</span>
+	        </div>
+	
+	        <!-- Quota gauges (cc-hud style compact) -->
+	        <template v-if="getCacheEntry(source._id.replace('quota-source/', ''))">
+	          <div class="space-y-1.5">
+	            <template
+	              v-for="(win, winKey) in getCacheEntry(source._id.replace('quota-source/', ''))!.windows"
+	              :key="winKey"
+	            >
+	              <QuotaGauge
+	                v-if="win"
+	                :used-percent="win.usedPercent"
+	                :label="t(`quota.${winKey}`)"
+	                :resets-at="win.resetsAt"
+	                compact
+	              />
+	            </template>
 	          </div>
-          <span
-            v-if="source.enabled"
-            class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium"
-          >
-            {{ t('quotaSources.enabled') }}
-          </span>
-          <span
-            v-else
-            class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium"
-          >
-            {{ t('common.disabled') }}
-          </span>
-        </div>
-
-        <!-- Outdated indicator -->
-        <div
-          v-if="isCacheOutdated(source._id.replace('quota-source/', ''))"
-          class="text-xs text-orange-500 mb-2 flex items-center gap-1"
-        >
-          <span>\u26A0\uFE0F</span>
-          <span>{{ t('common.stale') }}</span>
-        </div>
-
-        <!-- Quota gauges -->
-        <template v-if="getCacheEntry(source._id.replace('quota-source/', ''))">
-          <template
-            v-for="(win, winKey) in getCacheEntry(source._id.replace('quota-source/', ''))!.windows"
-            :key="winKey"
-          >
-            <QuotaGauge
-              v-if="win"
-              :used-percent="win.usedPercent"
-              :label="t(`quota.${winKey}`)"
-              :resets-at="win.resetsAt"
-              compact
-            />
-          </template>
-        </template>
-
-        <!-- Loading skeleton -->
-        <div v-else-if="getCacheEntry(source._id.replace('quota-source/', ''))?.loading" class="space-y-2">
-          <div class="h-4 bg-gray-100 rounded animate-pulse" />
-          <div class="h-4 bg-gray-100 rounded animate-pulse" />
-          <div class="h-4 bg-gray-100 rounded animate-pulse" />
-        </div>
-
-        <!-- No data yet -->
-        <div v-else class="text-center py-4">
-          <p class="text-xs text-gray-400">{{ t('common.loading') }}</p>
-        </div>
-      </div>
-    </div>
+	        </template>
+	
+	        <!-- Loading skeleton -->
+	        <div v-else-if="getCacheEntry(source._id.replace('quota-source/', ''))?.loading" class="space-y-1.5">
+	          <div class="h-4 bg-gray-100 rounded animate-pulse" />
+	          <div class="h-4 bg-gray-100 rounded animate-pulse" />
+	          <div class="h-4 bg-gray-100 rounded animate-pulse" />
+	        </div>
+	
+	        <!-- No data yet -->
+	        <div v-else class="text-center py-3">
+	          <p class="text-xs text-gray-400">{{ t('common.loading') }}</p>
+	        </div>
+	      </div>
+	    </div>
   </div>
 </template>
