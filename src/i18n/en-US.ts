@@ -65,11 +65,10 @@ export default {
       label: 'e.g. Personal Account',
       key: 'Enter API Key',
       search: 'Search key or label...',
-      model: 'e.g. gpt-4',
-    },
-    alertThreshold: 'Alert Threshold',
-  },
-  quota: {
+	      model: 'e.g. gpt-4',
+	    },
+	  },
+	  quota: {
     title: 'Quota Monitor',
     lastRefresh: 'Last refresh',
     refreshNow: 'Refresh Now',

@@ -67,7 +67,6 @@ export default {
       search: '搜索 Key 或标签...',
       model: '例如：gpt-4',
     },
-    alertThreshold: '预警阈值',
   },
   quota: {
     title: '额度监控',

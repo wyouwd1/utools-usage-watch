@@ -75,7 +75,7 @@ class AutoRefreshScheduler {
       const apiKey = apiKeyList.find(k => k._id === `apikey/${entry.apiKeyId}`)
       if (!apiKey) continue
 
-      const threshold = apiKey.quotaAlertThreshold ?? 20
+      const threshold = 20 // TODO: Phase 5 — move to quota source config
       if (entry.maxPercent <= threshold) continue
 
       // Check cooldown: same alert not repeated within 24 hours

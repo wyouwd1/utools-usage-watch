@@ -37,7 +37,6 @@ export async function add(
     baseUrl: data.baseUrl ?? null,
     models: data.models ?? [],
     status: data.status ?? KeyStatus.UNTESTED,
-    quotaAlertThreshold: data.quotaAlertThreshold ?? 80,
     lastTestedAt: data.lastTestedAt ?? null,
     lastTestResult: data.lastTestResult ?? null,
     sortOrder: data.sortOrder ?? 0,

@@ -26,7 +26,6 @@ const showKey = ref(false)
 const baseUrl = ref('')
 const modelsInput = ref('')
 const modelsList = ref<string[]>([])
-const alertThreshold = ref(30)
 
 // UI state
 const saving = ref(false)
@@ -78,7 +77,6 @@ function fillForm(ek: NonNullable<typeof existingKey.value>) {
   label.value = ek.label
   baseUrl.value = ek.baseUrl ?? ''
   modelsList.value = [...ek.models]
-  alertThreshold.value = ek.quotaAlertThreshold
   // Show key preview in the key field
   key.value = ek.keyPreview ?? ''
 
@@ -151,7 +149,6 @@ async function handleSave() {
       label: label.value.trim(),
       baseUrl: baseUrl.value.trim() || null,
       models: modelsList.value,
-      quotaAlertThreshold: alertThreshold.value,
     }
 
     if (isNew.value) {
@@ -337,24 +334,7 @@ async function handleSave() {
         </div>
       </div>
 
-      <!-- Alert threshold slider (10-50%) -->
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1.5">
-          {{ t('apiKeys.alertThreshold') }}: {{ alertThreshold }}%
-        </label>
-        <input
-          v-model.number="alertThreshold"
-          type="range"
-          min="10"
-          max="50"
-          step="5"
-          class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-        />
-        <div class="flex justify-between text-xs text-gray-400 mt-1">
-          <span>10%</span>
-          <span>50%</span>
-        </div>
-      </div>
+
 
       <!-- Error message -->
       <p v-if="error" class="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{{ error }}</p>

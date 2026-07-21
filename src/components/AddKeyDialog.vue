@@ -25,7 +25,6 @@ const showKey = ref(false)
 const baseUrl = ref('')
 const modelsInput = ref('')
 const modelsList = ref<string[]>([])
-const alertThreshold = ref(30)
 
 // UI state
 const saving = ref(false)
@@ -109,7 +108,6 @@ async function handleSave() {
       baseUrl: baseUrl.value.trim() || null,
       models: modelsList.value,
       status: KeyStatus.UNTESTED,
-      quotaAlertThreshold: alertThreshold.value,
       lastTestedAt: null,
       lastTestResult: null,
       sortOrder: Date.now(),
@@ -237,25 +235,6 @@ async function handleSave() {
               @click="addModel"
               class="px-3 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
             >+</button>
-          </div>
-        </div>
-
-        <!-- Alert threshold slider (10-50%) -->
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">
-            {{ t('apiKeys.alertThreshold') }}: {{ alertThreshold }}%
-          </label>
-          <input
-            v-model.number="alertThreshold"
-            type="range"
-            min="10"
-            max="50"
-            step="5"
-            class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-          />
-          <div class="flex justify-between text-xs text-gray-400 mt-1">
-            <span>10%</span>
-            <span>50%</span>
           </div>
         </div>
 

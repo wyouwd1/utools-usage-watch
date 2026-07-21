@@ -78,7 +78,6 @@ describe('quota-checker', () => {
         baseUrl: null,
         models: [],
         status: 'active' as any,
-        quotaAlertThreshold: 80,
         lastTestedAt: null,
         lastTestResult: null,
         sortOrder: 0,

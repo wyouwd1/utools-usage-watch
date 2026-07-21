@@ -32,7 +32,6 @@ export interface IApiKeyEntity {
   baseUrl: string | null
   models: string[]
   status: KeyStatus
-  quotaAlertThreshold: number
   lastTestedAt: number | null
   lastTestResult: ITestResult | null
   sortOrder: number
