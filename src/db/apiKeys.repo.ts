@@ -1,4 +1,4 @@
-import { COLLECTION, docId, getByPrefix, putDoc, removeDoc } from './index'
+import { COLLECTION, docId, getByPrefix, putDoc, removeDoc, getDoc } from './index'
 import type { IApiKeyEntity } from '@/types/apikey'
 import { KeyStatus } from '@/types/apikey'
 import { encrypt } from '@/services/encrypt'
@@ -9,9 +9,7 @@ export function getAll(): IApiKeyEntity[] {
 }
 
 export function getById(id: string): IApiKeyEntity | null {
-  const utools = (window as any).utools
-  if (!utools?.db) return null
-  return utools.db.get(docId(COLLECTION.API_KEY, id)) as IApiKeyEntity | null
+  return getDoc<IApiKeyEntity>(docId(COLLECTION.API_KEY, id))
 }
 
 export async function add(

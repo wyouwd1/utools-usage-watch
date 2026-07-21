@@ -1,4 +1,4 @@
-import { COLLECTION, docId, getByPrefix, putDoc, removeDoc } from './index'
+import { COLLECTION, docId, getByPrefix, putDoc, removeDoc, getDoc } from './index'
 import type { IQuotaSourceEntity, QuotaSourceType } from '@/types/quota'
 import { encrypt } from '@/services/encrypt'
 
@@ -8,9 +8,7 @@ export function getAll(): IQuotaSourceEntity[] {
 }
 
 export function getById(id: string): IQuotaSourceEntity | null {
-  const utools = (window as any).utools
-  if (!utools?.db) return null
-  return utools.db.get(docId(COLLECTION.QUOTA_SOURCE, id)) as IQuotaSourceEntity | null
+  return getDoc<IQuotaSourceEntity>(docId(COLLECTION.QUOTA_SOURCE, id))
 }
 
 export async function add(
