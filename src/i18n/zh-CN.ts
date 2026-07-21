@@ -108,6 +108,8 @@ export default {
       label: '例如：我的百炼账号',
       credential: '输入凭证',
     },
+    switchToManual: '改为手动输入',
+    switchToCurl: '使用 cURL 粘贴',
   },
   settings: {
     title: '设置',

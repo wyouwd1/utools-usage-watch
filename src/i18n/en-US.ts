@@ -108,6 +108,8 @@ export default {
       label: 'e.g. My Bailian Account',
       credential: 'Enter credential',
     },
+    switchToManual: 'Switch to manual input',
+    switchToCurl: 'Use cURL paste',
   },
   settings: {
     title: 'Settings',

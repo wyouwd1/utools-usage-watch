@@ -133,9 +133,10 @@ const showConfigFields = ref<Record<string, boolean>>({})
 	const curlCommand = ref('')
 	const parsedResult = ref<CurlParseResult | null>(null)
 	const parseError = ref<string | null>(null)
-	const showPreview = ref(false)
-	
-	// UI state
+		const showPreview = ref(false)
+		const manualMode = ref(false)
+		
+		// UI state
 const saving = ref(false)
 const error = ref<string | null>(null)
 
@@ -165,22 +166,24 @@ const hasCurlHint = computed(() => {
   return sourceTypeConfig[sourceType.value]?.curlHint ?? false
 })
 
-watch(sourceType, (val) => {
-  if (val) {
-    const cfg = sourceTypeConfig[val]
-    baseUrl.value = cfg.defaultBaseUrl
-    configValues.value = {}
-    showConfigFields.value = {}
-    showCurlInput.value = false
-    curlCommand.value = ''
-  } else {
-    baseUrl.value = ''
-    configValues.value = {}
-    showConfigFields.value = {}
-    showCurlInput.value = false
-    curlCommand.value = ''
-  }
-})
+	watch(sourceType, (val) => {
+	  if (val) {
+	    const cfg = sourceTypeConfig[val]
+	    baseUrl.value = cfg.defaultBaseUrl
+	    configValues.value = {}
+	    showConfigFields.value = {}
+	    showCurlInput.value = false
+	    curlCommand.value = ''
+	    manualMode.value = false
+	  } else {
+	    baseUrl.value = ''
+	    configValues.value = {}
+	    showConfigFields.value = {}
+	    showCurlInput.value = false
+	    curlCommand.value = ''
+	    manualMode.value = false
+	  }
+	})
 
 function handleParseCurl(): void {
   parseError.value = null
@@ -355,11 +358,11 @@ async function handleSave() {
           />
         </div>
 
-        <!-- Credential input -->
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">
-            {{ t('quotaSources.credential') }} <span class="text-red-500">*</span>
-          </label>
+	        <!-- Credential input -->
+	        <div v-if="!hasCurlHint || manualMode">
+	          <label class="block text-sm font-medium text-gray-700 mb-1.5">
+	            {{ t('quotaSources.credential') }} <span class="text-red-500">*</span>
+	          </label>
           <div class="relative">
             <input
               v-model="credential"
@@ -377,11 +380,11 @@ async function handleSave() {
           </div>
         </div>
 
-        <!-- Base URL input -->
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">
-            {{ t('quotaSources.baseUrl') }}
-          </label>
+	        <!-- Base URL input -->
+	        <div v-if="!hasCurlHint || manualMode">
+	          <label class="block text-sm font-medium text-gray-700 mb-1.5">
+	            {{ t('quotaSources.baseUrl') }}
+	          </label>
           <input
             v-model="baseUrl"
             type="text"
@@ -389,8 +392,8 @@ async function handleSave() {
           />
         </div>
 
-        <!-- Dynamic config fields (per source type) -->
-        <div v-if="configFields.length > 0" class="space-y-4">
+	        <!-- Dynamic config fields (per source type) -->
+	        <div v-if="(!hasCurlHint || manualMode) && configFields.length > 0" class="space-y-4">
           <div
             v-for="field in configFields"
             :key="field.key"
@@ -417,8 +420,8 @@ async function handleSave() {
           </div>
         </div>
 
-        <!-- cURL paste (OpenCode Go / Bailian) -->
-        <div v-if="hasCurlHint">
+	        <!-- cURL paste (OpenCode Go / Bailian) -->
+	        <div v-if="hasCurlHint && !manualMode">
           <button
             type="button"
             @click="showCurlInput = !showCurlInput"
@@ -497,14 +500,35 @@ async function handleSave() {
                   @click="applyCurlResult"
                   class="px-2.5 py-1 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors"
                 >
-                  {{ t('quotaSources.confirmFill') }}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Getting credentials guide -->
+	                  {{ t('quotaSources.confirmFill') }}
+	                </button>
+	              </div>
+	            </div>
+	          </div>
+	          <!-- Switch to manual mode -->
+	          <div class="text-center pt-2">
+	            <button
+	              type="button"
+	              @click="manualMode = true"
+	              class="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+	            >
+	              ✏️ {{ t('quotaSources.switchToManual') }}
+	            </button>
+	          </div>
+	        </div>
+	
+	        <!-- Switch back to curl mode -->
+	        <div v-if="hasCurlHint && manualMode" class="text-center pt-2">
+	          <button
+	            type="button"
+	            @click="manualMode = false"
+	            class="text-xs text-blue-600 hover:text-blue-700 transition-colors"
+	          >
+	            📋 {{ t('quotaSources.switchToCurl') }}
+	          </button>
+	        </div>
+	
+	        <!-- Getting credentials guide -->
         <div v-if="selectedGuide" class="bg-blue-50 rounded-lg px-4 py-3">
           <p class="text-xs font-medium text-blue-700 mb-1.5">{{ t('quotaSources.howToGet') }}</p>
           <ol class="list-decimal list-inside text-xs text-blue-600 space-y-1">

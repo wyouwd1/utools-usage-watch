@@ -69,9 +69,12 @@ const showCredential = ref(false)
 const baseUrl = ref('')
 const enabled = ref(true)
 
-// Config fields (dynamic per source type)
+	// Config fields (dynamic per source type)
 const configValues = ref<Record<string, string>>({})
 const showConfigFields = ref<Record<string, boolean>>({})
+
+// Mutually exclusive mode: cURL vs manual (only for sources with hasCurlHint)
+const manualMode = ref(false)
 
 // UI state
 const saving = ref(false)
@@ -151,6 +154,7 @@ function fillForm(es: NonNullable<typeof existingSource.value>) {
   baseUrl.value = es.baseUrl ?? ''
   enabled.value = es.enabled
   configValues.value = es.config ? { ...es.config } : {}
+  manualMode.value = false
 }
 
 watch(sourceType, (val) => {
@@ -160,6 +164,7 @@ watch(sourceType, (val) => {
     if (isNew.value || !baseUrl.value) {
       baseUrl.value = cfg.defaultBaseUrl
     }
+    manualMode.value = false
   }
 })
 
@@ -370,8 +375,8 @@ async function handleSave() {
         />
       </div>
 
-      <!-- Credential input -->
-      <div>
+      <!-- Credential input (hidden in curl mode for sources with hasCurlHint) -->
+      <div v-if="!hasCurlHint || manualMode">
         <label class="block text-sm font-medium text-gray-700 mb-1.5">
           {{ isNew ? t('quotaSources.credential') : t('quotaSources.credential') + ' (' + t('common.edit') + ')' }}
           <span v-if="isNew" class="text-red-500">*</span>
@@ -396,8 +401,8 @@ async function handleSave() {
         </p>
       </div>
 
-      <!-- cURL paste (OpenCode Go / Bailian) -->
-      <div v-if="hasCurlHint" class="border-t border-gray-100 pt-4">
+      <!-- cURL paste (OpenCode Go / Bailian) -- only show in curl mode -->
+      <div v-if="hasCurlHint && !manualMode" class="border-t border-gray-100 pt-4">
         <button
           type="button"
           @click="showCurlInput = !showCurlInput"
@@ -467,10 +472,21 @@ async function handleSave() {
             </div>
           </div>
         </div>
+
+        <!-- Switch to manual mode -->
+        <div class="text-center pt-2">
+          <button
+            type="button"
+            @click="manualMode = true"
+            class="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            ✏️ {{ t('quotaSources.switchToManual') }}
+          </button>
+        </div>
       </div>
 
-      <!-- Base URL input -->
-      <div>
+      <!-- Base URL input (hidden in curl mode for sources with hasCurlHint) -->
+      <div v-if="!hasCurlHint || manualMode">
         <label class="block text-sm font-medium text-gray-700 mb-1.5">
           {{ t('quotaSources.baseUrl') }}
         </label>
@@ -481,8 +497,8 @@ async function handleSave() {
         />
       </div>
 
-      <!-- Dynamic config fields (per source type) -->
-      <div v-if="configFields.length > 0" class="space-y-4">
+      <!-- Dynamic config fields (per source type) -- hidden in curl mode for sources with hasCurlHint -->
+      <div v-if="(!hasCurlHint || manualMode) && configFields.length > 0" class="space-y-4">
         <div
           v-for="field in configFields"
           :key="field.key"
@@ -507,6 +523,17 @@ async function handleSave() {
             </button>
           </div>
         </div>
+      </div>
+
+      <!-- Switch back to curl mode (only for sources with hasCurlHint when in manual mode) -->
+      <div v-if="hasCurlHint && manualMode" class="text-center pt-2">
+        <button
+          type="button"
+          @click="manualMode = false"
+          class="text-xs text-blue-600 hover:text-blue-700 transition-colors"
+        >
+          📋 {{ t('quotaSources.switchToCurl') }}
+        </button>
       </div>
 
       <!-- Enabled toggle -->
