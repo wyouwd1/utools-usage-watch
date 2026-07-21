@@ -1,775 +1,201 @@
-# Spec: utools-usage-watch — AI 模型管理与额度监控工具
+# Spec: cURL 直执行模式 — 粘贴即用，自动解析额度
 
-> 基于 uTools 的 AI 模型管理与额度监控插件。  
-> **API 管理**参考 Cherry Studio 的提供商管理体系。  
-> **额度监控**参考 [cc-hud](https://github.com/wyouwd1/cc-hud) 的配额采集架构。
+## Objective
 
----
+简化额度源的添加流程：用户粘贴一个能正常返回额度数据的 cURL 命令 → 系统自动执行并解析 → 如果额度数据有效则自动保存。后续每次刷新都重新执行该 cURL 获取最新数据。
 
-## 1. Objective
+**用户场景：**
+1. 用户打开 OpenCode Go 页面，F12 → Network → Copy as cURL
+2. 回到工具，粘贴 cURL，系统自动执行
+3. 如果返回的 HTML 中解析出额度数据（滚动/每周/每月使用率），自动保存
+4. 额度看板展示数据，后续刷新自动重新执行 cURL 获取最新数据
 
-### 1.1 用户故事
+**与手动模式的区别：**
+- **cURL 模式**：保存完整的 cURL 命令，每次刷新重新执行
+- **手动模式**：保存凭证（API Key / Cookie），每次刷新由适配器构造请求执行
 
-| 角色 | 需求 |
-|------|------|
-| **AI 重度用户** | 管理多个 AI 平台的 API Key，统一管理、快速测试 |
-| **开发者** | 实时掌握各 OpenCode、百炼等服务的订阅配额 |
-| **多账号用户** | 管理多个环境的 Key 配置，方便切换（工作/个人） |
+## Tech Stack
 
-### 1.2 核心模块
+保持不变：
+- Vue 3 + TypeScript strict + Vite 5 + Tailwind CSS + Pinia
+- uTools plugin v6 (utools.db)
+- Web Crypto API (AES-GCM)
+- 已有的 `curl-parser.ts` 复用
 
-```
-┌─────────────────────────────────────────────────────┐
-│                  uTools 插件入口                      │
-├─────────────────────┬───────────────────────────────┤
-│                     │                               │
-│  模块一：API Key 管理 │  模块二：额度监控              │
-│  （纯粹 Key 管理）    │  （独立额度源，参考 cc-hud）   │
-│                     │                               │
-│  · 提供商 + Key     │  · OpenCode Go 订阅配额        │
-│  · 标签 + Endpoint  │  · 百炼 Coding Plan           │
-│  · 模型列表         │  · DeepSeek/Moonshot/Qwen 余额 │
-│  · 连通性测试       │  · Groq/GLM/MiniMax 用量       │
-│                     │  · 每个源独立配置凭证           │
-│  ❌ 无额度相关字段   │  · 与 API Key 模块完全解耦     │
-│                     │  · 优先 cURL 粘贴录入凭证       │
-│                     │  · 参考 cc-hud，cURL 即引导     │
-│                     │  · 凭证过期自动检测             │
-│                     │                               │
-├─────────────────────┴───────────────────────────────┤
-│              utools.db（用户数据持久化）               │
-│  apikey/* · quota-source/* · setting/*              │
-│  ⚠ 额度缓存/历史存 Pinia 内存（不写 utools.db）      │
-└─────────────────────────────────────────────────────┘
-```
-
-### 1.3 成功标准
-
-- [ ] API Key 管理纯化：添加 Key 时无额度相关字段
-- [ ] 额度监控独立：添加/删除额度源不影响 API Key
-- [ ] 支持全部 cc-hud 后端（OpenCode Go / 百炼 / DeepSeek / Moonshot / Groq / Qwen / GLM / MiniMax）
-- [ ] 每个额度源可单独配置凭证，加密存储在 utools.db
-- [ ] 额度看板只展示已配置的额度源，不自动关联 API Key
-- [ ] **额度源添加支持 cURL 粘贴 + 预览确认**，也支持手动填写
-- [ ] **OpenCode Go / 百炼 通过 cURL 粘贴引导用户获取凭证（参考 cc-hud）**
-- [ ] **凭证过期自动检测**（401 响应），提示用户重新绑定
-- [ ] **导出导入包含额度源数据**
-- [ ] 单元测试覆盖率 ≥ 80%
-
----
-
-## 2. Tech Stack
-
-| 层 | 技术 | 说明 |
-|----|------|------|
-| 平台 | uTools Plugin v6+ | plugin.json + preload.js |
-| 前端 | Vue 3 + Vite + TypeScript | `<script setup>` 组合式 API |
-| 样式 | Tailwind CSS | 原子化 CSS |
-| 状态 | Pinia | 4 stores（apiKeys / quotas / quotaSources / settings） |
-| 存储 | `utools.db` (CouchDB 兼容) | 存用户数据（API Key / 额度源凭证 / 设置） |
-| 加密 | Web Crypto API (AES-GCM) | 凭证存储前加密 |
-| i18n | vue-i18n | 中英双语（含额度源引导文字） |
-| 图表 | Chart.js | 额度趋势 |
-| 构建 | Vite | 输出 dist/ |
-| 测试 | Vitest | 单元 + 集成 |
-
----
-
-## 3. Commands
+## Commands
 
 ```bash
-pnpm dev              # Vite 开发服务器
-pnpm build            # 生产构建
-pnpm test             # 运行测试
-pnpm type-check       # 类型检查
-pnpm pack-upx         # 打包为 .upx
+# 开发
+npm run dev
+
+# 构建
+npm run build
+
+# 测试
+npm test
 ```
 
----
-
-## 4. Project Structure
+## Project Structure
 
 ```
 src/
-├── components/
-│   ├── AddKeyDialog.vue           # 新增 API Key（无阈值字段 ✅）
-│   ├── TestConnection.vue         # 连通性测试
-│   ├── KeyStatusBadge.vue         # Key 状态标签
-│   ├── ProviderIcon.vue           # 提供商图标
-│   ├── QuotaGauge.vue             # 额度进度条（cc-hud 配色）
-│   ├── QuotaTrendChart.vue        # 趋势折线图
-│   ├── AddQuotaSourceDialog.vue   # 添加额度源弹窗（含 cURL 解析 + 引导）
-│   ├── CurlPreviewDialog.vue      # 【新增】cURL 解析预览确认弹窗
-│   ├── CredentialExpiredBanner.vue # 【新增】凭证过期提示条
-│   ├── SearchInput.vue            # 搜索框
-│   └── AlertToast.vue             # 预警通知
-│
-├── views/
-│   ├── Dashboard.vue
-│   ├── ApiKeys.vue
-│   ├── ApiKeyDetail.vue
-│   ├── QuotaBoard.vue             # 额度看板（卡片网格）
-│   ├── QuotaDetail.vue            # 单额度源详情
-│   ├── QuotaSourceDetail.vue      # 额度源详情/编辑（含 cURL 重绑定）
-│   └── Settings.vue               # 设置（含导出导入）
-│
-├── stores/
-│   ├── apiKeys.ts                 # API Key store
-│   ├── providers.ts               # 提供商注册
-│   ├── quotas.ts                  # 额度数据缓存（内存）
-│   ├── quotaSources.ts            # 额度源配置 store
-│   └── settings.ts                # 全局设置
-│
 ├── services/
-│   ├── quota-checker.ts           # 额度查询引擎（含过期检测）
-│   ├── auto-refresh.ts            # 自动刷新调度器
-│   ├── key-tester.ts              # API Key 连通性测试
-│   ├── encrypt.ts                 # AES-GCM 加密
-│   ├── curl-parser.ts             # 【新增】cURL 解析器（独立函数）
-│   └── quota-sources/             # 额度源适配器（8个）
-│       ├── index.ts               # IQuotaSourceAdapter 接口
-│       ├── registry.ts            # 适配器注册表
-│       ├── opencode.ts            # OpenCode Go
-│       ├── bailian.ts             # 百炼
-│       ├── deepseek.ts            # DeepSeek
-│       ├── moonshot.ts            # Moonshot
-│       ├── groq.ts                # Groq
-│       ├── qwen.ts                # 通义千问
-│       ├── glm.ts                 # 智谱
-│       └── minimax.ts             # MiniMax
-│
-├── db/
-│   ├── index.ts                   # utools.db 工具
-│   ├── apiKeys.repo.ts            # API Key CRUD
-│   ├── settings.repo.ts           # 设置持久化
-│   └── quotaSources.repo.ts       # 额度源 CRUD
-│
-├── types/
-│   ├── apikey.ts                  # IApiKeyEntity（无 quotaAlertThreshold ❌）
-│   ├── quota.ts                   # IQuotaSourceEntity + IQuotaWindows
-│   ├── settings.ts                # ISettings
-│   └── provider.ts                # ProviderType 枚举
-│
-├── i18n/
-│   ├── zh-CN.ts                   # 中文翻译
-│   └── en-US.ts                   # 英文翻译
-│
-└── router/
-    └── index.ts                   # 路由配置
-
-tests/
-├── unit/
-│   ├── db/
-│   ├── services/
-│   │   └── quota-sources/         # 8 个适配器测试（4 维度）
-│   ├── stores/
-│   └── services/curl-parser.spec.ts # 【新增】cURL 解析测试
-└── integration/
+│   ├── curl-parser.ts         # [已有] 解析 cURL → URL + headers
+│   ├── curl-executor.ts       # [新增] 执行 cURL → 返回 response text
+│   ├── response-parsers/      # [新增] 各额度源的响应解析器（纯函数）
+│   │   ├── index.ts           #   注册表：sourceType → parser
+│   │   ├── opencode.ts        #   解析 OpenCode Go HTML → IQuotaWindows
+│   │   ├── bailian.ts         #   解析百炼 JSON → IQuotaWindows
+│   │   └── ...
+│   ├── quota-sources/         # [保留] 适配器，仅在手动模式使用
+│   └── quota-checker.ts       # [改造] 判断使用 cURL 还是 adapter
+├── components/
+│   ├── AddQuotaSourceDialog.vue  # [改造] 简化 cURL 流程
+│   └── ...
+└── views/
+    ├── QuotaSourceDetail.vue     # [改造] 简化 cURL 流程
+    └── ...
 ```
 
----
+## 核心流程
 
-## 5. Code Style
+### 添加额度源（cURL 模式）
+
+```
+用户选择额度源类型
+  → 默认 cURL 输入模式展开，手动模式入口可选
+  → 用户粘贴 cURL → 点击"验证"（或自动触发）
+  → 解析 cURL → fetch() 请求（10s timeout）
+  → 按 sourceType 选择响应解析器解析
+  → 如果 IQuotaWindows 完整（rolling/weekly/monthly 有数据）
+    → 自动保存额度源（含 curlRaw、label）
+    → 跳转到额度看板展示数据
+  → 如果解析失败或额度数据不完整
+    → 显示错误信息，不清除 cURL 输入
+```
+
+### 刷新额度数据（自动/手动）
+
+```
+对于 cURL 模式的额度源：
+  → 读取 curlRaw
+  → parseCurlToRequest() 解析出 URL + method + headers + body
+  → fetch(url, { method, headers, body })
+  → 按 sourceType 选择对应的响应解析器
+  → parseResponse(html) → IQuotaWindows
+  → 更新 Pinia store 和界面
+
+对于手动模式的额度源：
+  → 保持现有 flow（decrypt credential → adapter.checkQuota）
+```
+
+### 响应解析器
 
 ```typescript
-// 沿用现有规范：
-// - TypeScript strict 模式
-// - Vue <script setup lang="ts">
-// - Pinia setup stores
-// - 适配器全部实现对应接口
-// - 注释中文，命名英文
+// src/services/response-parsers/opencode.ts
+export function parseOpenCodeHtml(html: string): IQuotaWindows | null {
+  // 从 data-slot DOM 结构中提取三个窗口数据
+  // 同现有 opencode.ts 中 extractQuota() 逻辑
+}
 
-// 示例：cURL 解析函数
-function parseCurl(curl: string): CurlParseResult {
-  // 提取 URL、cookie、workspaceId
-  const urlMatch = curl.match(/curl\s+['"]?([^'"\s]+)/)
-  if (!urlMatch) throw new CurlParseError('无法解析 URL')
-  
-  const url = urlMatch[1].replace(/\/$/, '')
-  const baseUrl = url.match(/(https?:\/\/[^\/]+)/)?.[1] ?? ''
-  const workspaceId = url.match(/\/workspace\/([^\/\s?]+)/)?.[1]
-  
-  // 解析 cookie
-  const cookie = extractCookieFromCurl(curl)
-  const headers = extractHeadersFromCurl(curl)
-  
-  return { baseUrl, workspaceId, cookie, headers }
+// src/services/response-parsers/bailian.ts
+export function parseBailianJson(json: string): IQuotaWindows | null {
+  // 从 JSON 响应中提取三个窗口数据
+}
+
+// 注册表
+// src/services/response-parsers/index.ts
+export const responseParsers: Record<string, (body: string) => IQuotaWindows | null> = {
+  [QuotaSourceType.OPENCODE_GO]: parseOpenCodeHtml,
+  [QuotaSourceType.BAILIAN]: parseBailianJson,
+  ...
 }
 ```
 
-### Key Conventions
+## 改造清单
 
-| 规则 | 说明 |
-|------|------|
-| 文件名 | camelCase（组件 PascalCase） |
-| 组件命名 | PascalCase，如 `AddQuotaSourceDialog.vue` |
-| 函数命名 | camelCase，如 `parseCurl()` |
-| 接口命名 | 前缀 `I`，如 `IQuotaSourceEntity` |
-| 枚举命名 | PascalCase，如 `QuotaSourceType` |
-| 类型文件 | 按模块拆分，`types/` 目录 |
-| 适配器命名 | 小写，如 `opencode.ts` |
-| CORS 相关 | 统一通过 preload.js 代理 |
-| 凭证显示 | 脱敏格式：`oc_****1234` |
-
----
-
-## 6. Data Model
-
-### 6.1 API Key（已清理，无额度字段）
+### 1. curl-parser.ts — 增强
+增加 `CurlRequest` 类型和 `parseCurlToRequest()`，提取 method、body：
 
 ```typescript
-// _id: apikey/<uuid>
-export interface IApiKeyEntity {
-  _id: string
-  _rev?: string
-  type: 'apikey'
-  provider: ProviderType
-  label: string
-  encryptedKey: string
-  keyPreview: string
-  baseUrl: string | null
-  models: string[]
-  status: KeyStatus
-  lastTestedAt: number | null
-  lastTestResult: ITestResult | null
-  sortOrder: number
-  createdAt: number
-  updatedAt: number
-  // ❌ 已移除：quotaAlertThreshold
-}
-```
-
-### 6.2 额度源（独立于 API Key）
-
-```typescript
-// _id: quota-source/<uuid>
-export interface IQuotaSourceEntity {
-  _id: string
-  _rev?: string
-  type: 'quota-source'
-  sourceType: QuotaSourceType
-  label: string
-  encryptedCredential: string     // AES-GCM 加密的凭证
-  credentialHint: string          // 脱敏提示，如 "oc_****1234"
-  baseUrl?: string
-  config?: Record<string, any>    // 如 workspaceId、region、sec_token
-  enabled: boolean
-  credentialExpiredAt?: number    // 【新增】凭证过期时间戳（cookie 场景）
-  lastCheckSucceeded?: boolean    // 【新增】上次检查是否成功
-  lastError?: string              // 【新增】上次错误信息
-  sortOrder: number
-  createdAt: number
-  updatedAt: number
-}
-
-export enum QuotaSourceType {
-  OPENCODE_GO = 'opencode-go',
-  BAILIAN = 'bailian',
-  DEEPSEEK = 'deepseek',
-  MOONSHOT = 'moonshot',
-  GROQ = 'groq',
-  QWEN = 'qwen',
-  GLM = 'glm',
-  MINIMAX = 'minimax',
-}
-```
-
-**模型变更说明：**
-- `credentialExpiredAt`：对 cookie 类源（OpenCode Go、百炼），记录 cookie 过期时间
-- `lastCheckSucceeded` / `lastError`：记录上次检查结果，用于 UI 显示过期提示
-
-### 6.3 额度数据（内存，不写 utools.db）
-
-```typescript
-// Pinia 内存
-export interface IQuotaCacheEntry {
-  windows: IQuotaWindows         // rolling / weekly / monthly
-  fetchedAt: number
-  ttl: number                    // 5 分钟 = 300000
-}
-
-export interface IQuotaWindows {
-  rolling?: IQuotaWindow         // 滚动窗口（如 OpenCode 5h）
-  weekly?: IQuotaWindow          // 周额度
-  monthly?: IQuotaWindow         // 月额度
-}
-
-export interface IQuotaWindow {
-  used: number
-  total: number
-  percent: number                // 0-100
-  remaining?: number
-  resetsAt?: number              // 重置时间戳
-}
-```
-
----
-
-## 7. Feature Specifications
-
-### 7.1 模块一：API Key 管理（纯化）
-
-| 功能 | 说明 |
-|------|------|
-| 提供商管理 | 内置 11+ 提供商配置 |
-| Key 增删改查 | CRUD，支持标签、Endpoint、模型列表 |
-| 一键测试 | 测试连通性，返回延迟 + 状态码 |
-| 加密存储 | AES-GCM 加密 |
-| 搜索过滤 | 按提供商/标签/状态搜索 |
-| ❌ 移除 | 预警阈值、额度相关字段全部移除 |
-
-### 7.2 模块二：额度监控（核心模块）
-
-#### 7.2.1 额度源管理
-
-| 功能 | 说明 |
-|------|------|
-| 添加额度源 | **cURL 粘贴（首选）+ 手动填写（fallback）** |
-| 编辑额度源 | 重新粘贴 cURL 更新凭证 |
-| 删除额度源 | 确认后删除 |
-| 启用/禁用 | 切换额度源是否参与刷新 |
-
-#### 7.2.2 cURL 录入流程（关键交互）
-
-**设计原则：cURL 模式与手动模式互斥。** 对于 OpenCode Go 和百炼，默认只显示 cURL 粘贴区，手动填写作为可切换的 fallback。
-
-**新增页流程（OpenCode Go / 百炼）：**
-
-```
-用户选择额度源类型（如 OpenCode Go）
-
-  ┌────────────────────────────────────────────┐
-  │ 标签: [OpenCode Go Account  ← 自动填入]    │
-  │                                            │
-  │ 📋 粘贴 cURL（推荐）                       │
-  │ ┌──────────────────────────────────┐      │
-  │ │ curl 'https://opencode.ai/...'  │      │
-  │ │ -H 'Cookie: auth=xxx...'        │      │
-  │ └──────────────────────────────────┘      │
-  │ [🔍 解析 cURL]                            │
-  │                                            │
-  │ ┌─ 解析结果 ──────────────────────────┐   │
-  │ │ ✅ Base URL:    opencode.ai         │   │
-  │ │ ✅ Cookie:      auth****e123        │   │
-  │ │ ✅ Workspace:   ws_abc123           │   │
-  │ │                       [✗]  [✓ 填充] │   │
-  │ └────────────────────────────────────┘   │
-  │                                            │
-  │ ─── 或 ───                                 │
-  │ [✏️ 改为手动输入]    ← 点击切换到手动模式  │
-  └────────────────────────────────────────────┘
-
-点击"改为手动输入"后：
-
-  ┌────────────────────────────────────────────┐
-  │ 标签: [OpenCode Go Account]                │
-  │                                            │
-  │ 🔧 手动输入凭证                            │
-  │ Cookie: [auth=xxx________________]         │
-  │ Workspace ID: [ws_abc123__________]        │
-  │ Base URL: [https://opencode.ai____]        │
-  │                                            │
-  │ [📋 使用 cURL 粘贴]  ← 点击切回 cURL 模式  │
-  └────────────────────────────────────────────┘
-```
-
-**切换规则：**
-- 默认显示 cURL 模式，隐藏凭证/Workspace ID/Base URL 输入框
-- 点击「改为手动输入」→ 隐藏 cURL 区，显示凭证/配置字段
-- 手动模式下，已通过 cURL 解析的值**保留并回填**到各字段，用户可直接修改
-- 点击「使用 cURL 粘贴」→ 隐藏手动字段，回到 cURL 模式
-- 两种模式切换时**不丢失已填写的数据**
-
-**编辑已有额度源（OpenCode Go / 百炼）：**
-
-```
-  ┌────────────────────────────────────────────┐
-  │ 标签: [My OpenCode Go         ← 可编辑]   │
-  │ 当前凭证: auth****e123                     │
-  │                                            │
-  │ 📋 粘贴新 cURL 更新凭证                    │
-  │ ┌──────────────────────────────────┐      │
-  │ │ curl 'https://...'              │      │
-  │ └──────────────────────────────────┘      │
-  │ [🔍 解析 cURL]                            │
-  │                                            │
-  │ [✏️ 改为手动输入]                          │
-  └────────────────────────────────────────────┘
-```
-
-**其他 6 种额度源（DeepSeek/Moonshot/Groq/Qwen/GLM/MiniMax）：**
-保持现有交互不变 — 直接输入 API Key，无需 cURL。
-
-#### 7.2.3 每种额度源的凭证引导（参考 cc-hud）
-
-| 额度源 | 凭证类型 | 引导方式 |
-|--------|---------|---------|
-| **OpenCode Go** | cookie | **cURL 粘贴（主）**：DevTools → Network → 复制为 cURL → 粘贴到输入框 |
-| | | 手动填写（fallback）：分别输入 cookie、base URL、workspace ID |
-| **百炼** | cookie | **cURL 粘贴（主）**：同 OpenCode Go 方式 |
-| | | 手动填写（fallback）：cookie + sec_token + region |
-| **DeepSeek** | api-key | 输入 API Key |
-| **Moonshot** | api-key | 输入 API Key |
-| **Groq** | api-key | 输入 API Key |
-| **Qwen** | api-key | 输入 API Key |
-| **GLM** | api-key | 输入 API Key |
-| **MiniMax** | api-key | 输入 API Key + group_id |
-
-**设计原则：**
-- **cURL 解析只针对 OpenCode Go 和百炼**（它们的凭证是 cookie，没有简单 API Key）
-- **cURL 模式与手动模式互斥**：默认只显示 cURL 粘贴区，手动模式通过「改为手动输入」链接切换
-- 切换模式时已解析的数据保留并回填
-- 其他额度源（DeepSeek/Moonshot/Groq/Qwen/GLM/MiniMax）：直接输入 API Key，保持现有交互不变
-- 参考 cc-hud，**cURL 粘贴即是最好的引导**，不需要额外文档链接
-
-#### 7.2.4 三窗口展示
-
-- **rolling（滚动窗口）**：如 OpenCode Go 的 5h 滑动窗口
-- **weekly（周）**：如 Groq 的周配额
-- **monthly（月）**：如 DeepSeek 余额、Moonshot 余额
-- 每个窗口含：进度条 + 百分比 + 剩余量 + 重置倒计时
-- 颜色分级（cc-hud 规范）：🟢≤50% / 🟡≤70% / 🟠≤85% / 🔴>85%
-- 兼容不同标准：有的源只有余额（无总量），有的有配额 usage/limit
-
-#### 7.2.5 刷新机制
-
-| 方式 | 说明 |
-|------|------|
-| 手动刷新 | QuotaBoard + QuotaDetail 均有刷新按钮 |
-| 进入页面自动刷新 | 路由进入时触发刷新（有缓存则用缓存） |
-| 定时自动刷新 | Settings 配置间隔（5/15/30/60 分钟），页面 visible 时生效 |
-
-#### 7.2.6 凭证过期检测
-
-- 额度查询返回 401 时，自动标记该源的 `lastCheckSucceeded = false`
-- QuotaBoard 卡片显示 ⚠️ 过期标记
-- QuotaDetail 顶部显示 `CredentialExpiredBanner.vue`：
-  - "凭证已过期，请重新绑定"
-  - 点击跳转到编辑页面
-  - 支持原地粘贴新 cURL 更新
-- 数据仍展示最后一次成功获取的额度（灰色半透明状态）
-
----
-
-## 8. Backend Adapter Architecture
-
-### 8.1 IQuotaSourceAdapter 接口
-
-```typescript
-export interface IQuotaSourceAdapter {
-  readonly sourceType: QuotaSourceType
-  readonly label: string
-  readonly defaultBaseUrl?: string
-  readonly credentialType: 'api-key' | 'cookie'  // 【新增】凭证类型
-
-  /** 使用凭证查询额度 */
-  checkQuota(credential: string, config?: Record<string, any>): Promise<IQuotaWindows | null>
-}
-```
-
-### 8.2 适配器清单
-
-| 适配器 | 源类型 | 凭证类型 | 请求方式 |
-|--------|--------|---------|---------|
-| `opencode.ts` | OPENCODE_GO | cookie | 解析 HTML 页面提取 usage |
-| `bailian.ts` | BAILIAN | cookie | 调用百炼 API |
-| `deepseek.ts` | DEEPSEEK | api-key | GET /user/balance |
-| `moonshot.ts` | MOONSHOT | api-key | GET /v1/billing/balance |
-| `groq.ts` | GROQ | api-key | GET /v1/user/usage |
-| `qwen.ts` | QWEN | api-key | POST /api/v1/billing/query |
-| `glm.ts` | GLM | api-key | GET /api/biz/account/query |
-| `minimax.ts` | MINIMAX | api-key | GET /v1/token_plan/remains |
-
-### 8.3 与 API Key Provider Adapter 的区别
-
-- **Provider Adapter**（API Key 模块）：`testConnection()` — 仅测试连通性
-- **Quota Source Adapter**（额度监控模块）：`checkQuota(credential)` — 查询额度
-- 两者**完全独立**，不共享数据
-
----
-
-## 9. CURL 解析规范
-
-### 9.1 解析器
-
-独立模块 `src/services/curl-parser.ts`，支持：
-
-```typescript
-interface CurlParseResult {
-  method: string
+export interface CurlRequest {
   url: string
-  baseUrl: string
+  method: string
   headers: Record<string, string>
-  cookies: Record<string, string>
   body?: string
-  // 特定字段提取
-  workspaceId?: string
-  apiKey?: string
-  authToken?: string
-}
-
-interface CurlParseError {
-  code: 'NO_URL' | 'NO_CREDENTIAL' | 'INVALID_FORMAT'
-  message: string
-  // 友好提示
-  userMessage: { zh: string; en: string }
 }
 ```
 
-### 9.2 支持的凭证提取
-
-| 场景 | 提取方式 |
-|------|---------|
-| `Authorization: Bearer xxx` | 提取 token |
-| `Cookie: auth=xxx` 或 `Cookie: xxx` | 提取 cookie 字符串 |
-| `-H "cookie: xxx"` | 同上 |
-| `apiKey=xxx` 在 URL query | 提取 API Key |
-| `x-api-key: xxx` header | 提取 API Key |
-
-### 9.3 解析失败处理
-
-- 解析失败时显示具体错误原因（中文/英文）
-- 同时展开手动填写表单作为 fallback
-- 不丢失用户已输入的内容
-
----
-
-## 10. UI 交互详细规范
-
-### 10.1 QuotaBoard 布局
-
-```
-┌──────────────────────────────────────────────────────┐
-│  📊 额度监控    [+ 添加额度源]  [🔄 刷新]            │
-│  已启用: 3  |  有数据: 2  |  有告警: 0              │
-├──────────────────────────────────────────────────────┤
-│ ┌────────────────┐ ┌────────────────┐                │
-│ │ 🔑 OpenCode Go │ │ 🤖 百炼       │                │
-│ │ ⚠️ 凭证已过期   │ │ 🟢 542/1000   │                │
-│ │ 🌊 5h: --%     │ │ 🌊 5h: 45%    │                │
-│ │ 📅 周: --%     │ │ 📅 周: 62%    │                │
-│ │ 📅 月: --%     │ │ 📅 月: 38%    │                │
-│ │                │ │ 5分钟前刷新    │                │
-│ └────────────────┘ └────────────────┘                │
-│ ┌────────────────┐ ┌────────────────┐                │
-│ │ 🔮 DeepSeek    │ │ 🌙 Moonshot   │                │
-│ │ 🟢 ¥52.30 余额  │ │ 🟢 ¥128 余额   │                │
-│ │ 📅 月: 0%      │ │ 📅 月: 15%    │                │
-│ └────────────────┘ └────────────────┘                │
-└──────────────────────────────────────────────────────┘
+### 2. src/services/curl-executor.ts — 新增
+```typescript
+export async function executeCurl(request: CurlRequest): Promise<string> {
+  const res = await fetch(request.url, {
+    method: request.method,
+    headers: request.headers,
+    body: request.body,
+    signal: AbortSignal.timeout(10000),
+    redirect: 'follow',
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.text()
+}
 ```
 
-### 10.2 QuotaDetail 布局
+### 3. src/services/response-parsers/ — 新增目录
+从现有 `quota-sources/` 各适配器中提取 parser 逻辑为纯函数。
 
-```
-┌──────────────────────────────────────────────────────┐
-│  ← 返回   🔑 OpenCode Go  [✏️ 编辑]  [🔄 刷新]       │
-│                                                       │
-│  ⚠️ 凭证已过期 — 请重新绑定  [立即更新]                │  ← 仅过期时显示
-│                                                       │
-│  ┌──────────────────────────────────────┐             │
-│  │ 🌊 滚动窗口 (5h)                      │             │
-│  │ ████████████░░░░░░░░░  542/1000  54% │             │
-│  │ 🟢 状态正常  |  2小时15分后重置       │             │
-│  └──────────────────────────────────────┘             │
-│  ┌──────────────────────────────────────┐             │
-│  │ 📅 周额度                              │             │
-│  │ ██████████████████░░░░  3200/5000 64%│             │
-│  │ 🟡 注意  |  3天后重置                  │             │
-│  └──────────────────────────────────────┘             │
-│  ┌──────────────────────────────────────┐             │
-│  │ 📅 月额度                              │             │
-│  │ ████████████░░░░░░░░░  45%           │             │
-│  │ 🟢 正常  |  18天后重置                 │             │
-│  └──────────────────────────────────────┘             │
-│                                                       │
-│  📈 使用趋势（近 7 天）                                 │
-│  ┌──────────────────────────────────────┐             │
-│  │  [Chart.js 折线图]                    │             │
-│  └──────────────────────────────────────┘             │
-│                                                       │
-│  上次刷新: 2 分钟前  |  凭证类型: cookie             │
-│  凭证: oc_****89ab  |  Base URL: opencode.ai        │
-└──────────────────────────────────────────────────────┘
-```
+### 4. quota-checker.ts — 改造
+在 `checkSingleSource` 中先判断 `source.curlRaw`：
+- 有 curlRaw → cURL 模式：executeCurl → responseParser
+- 无 curlRaw → 手动模式：现有 adapter 流程
 
-### 10.3 AddQuotaSourceDialog UX 流程
+### 5. AddQuotaSourceDialog.vue — 简化 cURL 流程
+- 移除：解析预览 → 确认填充 两步流程
+- 改为：粘贴 cURL → [验证并保存] 按钮 → 执行 + 解析 + 自动保存
+- 验证成功前保存按钮不可用
+- 验证失败显示错误
+- 手动模式入口保留（"改为手动输入"切换）
 
-```
-步骤 1: 选择额度源类型
-        显示 8 个类型卡片（图标 + 名称）
-        
-步骤 2: 选择录入方式
-        ┌────────────────────┐
-        │ 📋 粘贴 cURL (推荐) │ → 显示 cURL 文本区
-        │ 🔧 手动输入        │ → 显示表单字段
-        │ 📖 查看官方文档     │ → 打开浏览器
-        └────────────────────┘
-        
-步骤 3a (cURL):
-        粘贴 cURL → 点击"解析"
-        → 预览确认弹窗 → 确认 → 保存
-        
-步骤 3b (手动):
-        填写各字段 → 保存
-        
-步骤 4: 保存后自动跳转到该额度源详情页
-```
+### 6. QuotaSourceDetail.vue — 同上
+- cURL 模式编辑时：显示已有 curlRaw，可修改后重新验证
+- 手动模式编辑时：保持现有字段
 
----
+## 数据模型
 
-## 11. Settings 设置页
+`IQuotaSourceEntity` 已有字段 `curlRaw?: string`，无需新增。
 
-### 11.1 已有配置
+添加额度源时：
+- cURL 模式：`curlRaw` 有值，`encryptedCredential` 可为空
+- 手动模式：`encryptedCredential` 有值，`curlRaw` 为空
 
-| 配置项 | 类型 | 默认值 |
-|--------|------|--------|
-| 语言 | zh-CN / en-US | 跟随系统 |
-| 刷新间隔 | 5/15/30/60 分钟 | 15 |
-| 数据导入 | JSON 文件导入 | — |
-| 数据导出 | 导出为 JSON | — |
+## UI 文案
 
-### 11.2 导出/导入内容
+cURL 模式的 label 自动从响应中推断（例如响应中的 workspace name），或者让用户手动输入。
 
-导出 JSON 包含：
-- `version`: 导出格式版本
-- `exportedAt`: 导出时间
-- `apiKeys`: API Key 列表（加密字段保持加密状态）
-- `quotaSources`: 额度源列表（加密字段保持加密状态）**【新增】**
-- `settings`: 全局设置
+## 验证标准
 
-导入时：
-- 支持选择导入项（API Key / 额度源 / 设置）
-- 重复检测（基于 _id）+ 覆盖确认
-- 导入后刷新对应 store
+1. ✅ 用户粘贴正确的 cURL → 自动执行 → 解析到数据 → 自动保存到看板
+2. ✅ 额度看板展示 cURL 源的三个窗口数据（cc-hud 风格）
+3. ✅ 手动刷新 → 重新执行 cURL → 更新数据
+4. ✅ 自动刷新 → 同上的定时执行
+5. ✅ cURL 过期（返回 401/403）→ 提示用户更新 cURL
+6. ✅ 手动模式额度源不受任何影响
+7. ✅ 184+ 全部测试通过，构建无错误
 
-### 11.3 清理项
+## 边界
 
-- 移除"默认预警阈值"滑块（已无用）
-- 移除 `apiKeys.threshold` i18n 翻译键
+- **Always:**
+  - 执行 cURL 必须设 timeout（10s）
+  - 解析响应必须验证包含有效额度数据才保存
+  - cURL 失败时在 UI 显示明确错误
+  - cURL 模式和手动模式在 UI 上清晰区分
 
----
+- **Ask first:**
+  - 新增 npm 依赖
+  - 修改 utools 插件配置
+  - 修改数据库 schema
 
-## 12. Testing Strategy
-
-| 层级 | 框架 | 覆盖 |
-|------|------|------|
-| 单元测试 | Vitest | services/、stores/、db/ |
-| 集成测试 | Vitest | 额度源 CRUD → 查询全流程 |
-
-### 12.1 新增测试
-
-| 测试文件 | 内容 |
-|---------|------|
-| `tests/unit/services/curl-parser.spec.ts` | cURL 解析：规范化、错误处理、边界 |
-| `tests/unit/stores/quotaSources.spec.ts` | 额度源 store：CRUD、过期检测 |
-| `tests/unit/services/auto-refresh.spec.ts` | 含过期检测 + 重试逻辑 |
-
-### 12.2 现有适配器测试（每个适配器 4 维度）
-
-| 维度 | 说明 |
-|------|------|
-| isolation | 隔离测试，mock HTTP |
-| parse | 响应解析正确性 |
-| error | 错误处理（401/超时/解析失败） |
-| cache | 缓存命中/失效 |
-
----
-
-## 13. Boundaries
-
-### ✅ Always do
-
-- API Key 和额度源凭证存储前必须 AES-GCM 加密
-- 所有凭证展示时脱敏（`oc_****89ab`）
-- 每个 HTTP 请求设超时 5s
-- 所有 IO try-catch，失败静默降级
-- 额度数据只存 Pinia 内存（不写 utools.db）
-- **cURL 解析后必须显示预览让用户确认**
-- **凭证过期（401）自动标记并提示用户**
-- 每个额度源类型提供官方文档链接
-
-### ❓ Ask first
-
-- 添加新的额度源类型
-- 修改 utools.db schema（`_id` 前缀变更）
-- 引入新 npm 依赖
-- 更改加密方案
-
-### 🚫 Never do
-
-- 不将 API Key 与额度监控混为一谈
-- 不将程序运行数据写入同步数据库
-- 不在 UI 中明文显示完整凭证
-- 不将用户数据上传到第三方
-- **不要 cURL 解析后直接保存，必须经过用户预览确认**
-
----
-
-## 14. 当前代码需要修改的清单
-
-### 14.1 Bug 修复
-
-| # | 问题 | 涉及文件 | 修复内容 |
-|---|------|---------|---------|
-| B1 | QuotaSourceDetail.vue OpenCode Go 配置错误 | `QuotaSourceDetail.vue` | 修正 configFields（当前错误复制了 Bailian 的字段） |
-| B2 | QuotaSourceDetail.vue 缺少 cURL 粘贴 | `QuotaSourceDetail.vue` | 添加 cURL 解析 + 引导区域 |
-| B3 | QuotaSourceDetail.vue 缺少引导步骤 | `QuotaSourceDetail.vue` | 添加 step-by-step 指引 |
-
-### 14.2 功能新增
-
-| # | 功能 | 涉及文件 | 说明 |
-|---|------|---------|------|
-| F1 | 独立 cURL 解析模块 | `src/services/curl-parser.ts` | 从 AddQuotaSourceDialog.vue 抽离 parseCurl |
-| F2 | cURL 预览确认弹窗 | `src/components/CurlPreviewDialog.vue` | 解析结果显示 + 用户确认 |
-| F3 | 凭证过期检测 | `src/services/quota-checker.ts` | 检测 401 响应，标记过期 |
-| F4 | 凭证过期 UI | `src/components/CredentialExpiredBanner.vue` | 过期提示条 |
-| F5 | 官方文档链接 | 各适配器文件 + AddQuotaSourceDialog.vue | 每种额度源的官方文档 URL |
-| F6 | 导出导入含额度源 | `src/views/Settings.vue` | Settings 导出/导入合并 quotaSources |
-| F7 | 自动刷新含过期重试 | `src/services/auto-refresh.ts` | 过期标记 + 重试逻辑 |
-| **F8** | **cURL 与手动模式互斥** | `AddQuotaSourceDialog.vue`, `QuotaSourceDetail.vue` | 默认只显示 cURL 区，隐藏凭证/配置字段；「改为手动输入」链接切换 |
-
-### 14.3 清理
-
-| # | 清理项 | 文件 | 说明 |
-|---|--------|------|------|
-| C1 | Settings 阈值滑块 | `src/views/Settings.vue` | 移除无用滑块 |
-| C2 | i18n stale keys | `src/i18n/zh-CN.ts`, `en-US.ts` | 移除 `apiKeys.threshold` |
-| C3 | 引导文字 i18n 化 | `src/i18n/zh-CN.ts`, `en-US.ts` | 将 AddQuotaSourceDialog 的硬编码中文引导移到 i18n |
-
-### 14.4 测试新增
-
-| # | 测试 | 文件 |
-|---|------|------|
-| T1 | curl-parser 单元测试 | `tests/unit/services/curl-parser.spec.ts` |
-| T2 | quotaSources store 测试 | `tests/unit/stores/quotaSources.spec.ts` |
-| T3 | 过期检测测试 | 在 quota-checker 测试中添加 |
-
----
-
-## 15. 已确认的设计决策
-
-| 决策 | 结论 |
-|------|------|
-| cURL 解析范围 | 仅 OpenCode Go 和百炼（cookie 类凭证），其他源直接输入 API Key |
-| 凭证引导方式 | 参考 cc-hud，cURL 粘贴即是最好的引导，不需要额外文档链接 |
-| cURL vs 手动 | **互斥**：默认 cURL 模式，隐藏凭证/配置字段；「改为手动输入」链接切换 |
-| 切换时数据保留 | 从 cURL 切到手动时，已解析的值保留并回填到各字段 |
-| 百炼 fallback | cURL 为主，手动 fallback 含 cookie + sec_token + region 字段 |
-| 连续失败处理 | 自动刷新时连续 3 次查询失败，自动禁用该额度源（`enabled = false`）+ 通知用户 |
-
----
-
-> **本 spec 已覆盖用户访谈结果：**
-> 1. cURL 粘贴为主 + 手动 fallback
-> 2. 所有额度源类型支持官方文档链接
-> 3. cURL 解析 → 预览 → 确认流程
-> 4. 凭证过期自动检测（401）→ 提示更新
-> 5. 三合一刷新机制（手动/进入页面/定时）
-> 6. 解析失败 → 错误提示 + 手动 fallback
-> 7. 兼容不同额度标准
-> 8. 当前布局可接受
-> 9. **cURL 与手动模式互斥，默认只显示 cURL，隐藏凭证/配置字段**
-> 10. **百炼只用 cURL（手动作为 fallback），其他 6 种额度源保持现有交互**
->
-> **确认后进入 Plan 阶段。**
+- **Never:**
+  - 在浏览器/utools 中执行 shell 命令
+  - 不验证响应有效性就保存
+  - 移除手动模式
