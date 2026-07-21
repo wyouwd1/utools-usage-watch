@@ -35,7 +35,7 @@ const sourceTypeIcons: Record<string, string> = {
 }
 
 function sourceIcon(type: string): string {
-  return sourceTypeIcons[type] ?? '\uD83D\uDD14'
+  return sourceTypeIcons[type] ?? '🔔'
 }
 
 // Counts
@@ -104,15 +104,15 @@ function isCacheOutdated(sourceId: string): boolean {
     <!-- Summary bar -->
     <div class="flex items-center gap-4 mb-6 text-sm">
       <div class="flex items-center gap-1.5 text-gray-500">
-        <span class="text-base">\uD83D\uDCCA</span>
+        <span class="text-base">📊</span>
         <span>{{ enabledCount }} {{ t('quotaSources.title') }}</span>
       </div>
       <div v-if="sourcesWithData.length > 0" class="flex items-center gap-1.5 text-gray-500">
-        <span class="text-base">\u2705</span>
+        <span class="text-base">✅</span>
         <span>{{ sourcesWithData.length }} {{ t('common.withData') }}</span>
       </div>
       <div v-if="alertCount > 0" class="flex items-center gap-1.5 text-red-500 font-medium">
-        <span class="text-base">\uD83D\uDD14</span>
+        <span class="text-base">🔔</span>
         <span>{{ alertCount }} {{ t('dashboard.alertKeys') }}</span>
       </div>
       <div v-if="lastRefreshDisplay" class="ml-auto text-gray-400">
@@ -133,7 +133,7 @@ function isCacheOutdated(sourceId: string): boolean {
 
     <!-- Empty state -->
     <div v-if="quotaSourcesStore.sourceList.length === 0 && !quotaSourcesStore.loading" class="text-center py-16">
-      <div class="text-4xl mb-4">\uD83D\uDCC8</div>
+      <div class="text-4xl mb-4">📊</div>
       <p class="text-gray-400 mb-4">{{ t('quota.noData') }}</p>
       <button
         @click="goToAddSource"
