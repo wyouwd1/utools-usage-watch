@@ -13,7 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest --watch",
     "test:coverage": "vitest run --coverage",
-    "pack-upx": "vite build && cd dist && zip -r ../ai-usage-watch-1.0.0.upx ."
+    "pack-upx": "vite build && cd dist && copy ..\\plugin.json plugin.json && copy ..\\preload.js preload.js && copy ..\\logo.png logo.png && tar -a -c -f ..\\ai-usage-watch-1.0.0.upx plugin.json preload.js logo.png index.html assets\\ 2>nul && del plugin.json preload.js logo.png && echo 打包完成: ai-usage-watch-1.0.0.upx"
   },
   "dependencies": {
     "chart.js": "^4.4.0",
