@@ -3,6 +3,24 @@ dist/
 *.upx
 .DS_Store
 *.local
+
+# Playwright MCP test artifacts
 .playwright-mcp/
-*.png
-*.jpg
+quota-board-initial
+quota-board-test
+quota-new-simple
+quota-new-source2
+quota-new-source3
+quota-save-test
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
