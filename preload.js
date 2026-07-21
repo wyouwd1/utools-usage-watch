@@ -2,12 +2,12 @@
 // 遵循 CommonJS 规范，不能打包/压缩
 
 const path = require('node:path')
-
-// 将 utools API 桥接到渲染进程
-window.utools = window.utools || {}
+const os = require('node:os')
 
 // 暴露 Node.js 工具方法给渲染层
 window.services = {
   getAppPath: () => path.resolve(__dirname),
   getPlatform: () => process.platform,
+  getHomeDir: () => os.homedir(),
+  getHostname: () => os.hostname(),
 }

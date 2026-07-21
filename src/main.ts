@@ -22,3 +22,15 @@ app.use(createPinia())
 app.use(router)
 app.use(i18n)
 app.mount('#app')
+
+// uTools 子命令路由：aw quota → /quota, aw keys → /api-keys, aw settings → /settings
+if ((window as any).utools) {
+  ;(window as any).utools.onPluginEnter((action: any) => {
+    if (action.type === 'text' && action.payload) {
+      const text = action.payload.trim().toLowerCase()
+      if (text.includes('quota')) router.push('/quota')
+      else if (text.includes('key')) router.push('/api-keys')
+      else if (text.includes('setting') || text.includes('config')) router.push('/settings')
+    }
+  })
+}
