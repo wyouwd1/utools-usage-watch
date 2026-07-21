@@ -7,6 +7,12 @@ import { useQuotasStore } from '@/stores/quotas'
 import { QuotaSourceType, type IQuotaWindows } from '@/types'
 import type { IQuotaSourceAdapter } from '@/services/quota-sources'
 
+// Mock decrypt to return the input as-is (tests use plaintext "credentials")
+vi.mock('@/services/encrypt', () => ({
+  decrypt: vi.fn((s: string) => Promise.resolve(s)),
+  encrypt: vi.fn((s: string) => Promise.resolve(`encrypted:${s}`)),
+}))
+
 // Mock adapter implementing IQuotaSourceAdapter
 class MockQuotaAdapter implements IQuotaSourceAdapter {
   readonly sourceType = QuotaSourceType.OPENCODE_GO

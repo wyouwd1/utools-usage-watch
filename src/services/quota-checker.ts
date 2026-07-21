@@ -1,6 +1,7 @@
 import { quotaSourceRegistry } from './quota-sources/registry'
 import { useQuotaSourcesStore } from '@/stores/quotaSources'
 import { useQuotasStore } from '@/stores/quotas'
+import { decrypt } from './encrypt'
 
 /**
  * Check quota for a single quota source.
@@ -23,7 +24,9 @@ export async function checkSingleSource(sourceId: string): Promise<void> {
 
   quotasStore.setLoading(`source:${sourceId}`, true)
   try {
-    const result = await adapter.checkQuota(source.encryptedCredential, source.config)
+    // Decrypt the stored encrypted credential before passing to the adapter
+    const plainCredential = await decrypt(source.encryptedCredential)
+    const result = await adapter.checkQuota(plainCredential, source.config)
     if (result) {
       quotasStore.updateQuota(`source:${sourceId}`, result)
       sourcesStore.markCheckResult(sourceId, true)  // mark success

@@ -165,20 +165,21 @@ function handleImport(event: Event) {
 	        for (const qs of data.quotaSources) {
 	          if (qs.sourceType && qs.label) {
 	            try {
-	              quotaSourcesRepo.importEntity({
-	                _id: qs._id ?? `quota-source/${crypto.randomUUID()}`,
-	                type: 'quota-source',
-	                sourceType: qs.sourceType,
-	                label: qs.label,
-	                encryptedCredential: qs.encryptedCredential ?? '',
-	                credentialHint: qs.credentialHint ?? '',
-	                baseUrl: qs.baseUrl ?? undefined,
-	                config: qs.config ?? {},
-	                enabled: qs.enabled ?? true,
-	                sortOrder: qs.sortOrder ?? Date.now(),
-	                createdAt: qs.createdAt ?? Date.now(),
-	                updatedAt: qs.updatedAt ?? Date.now(),
-	              })
+              quotaSourcesRepo.importEntity({
+                _id: qs._id ?? `quota-source/${crypto.randomUUID()}`,
+                type: 'quota-source',
+                sourceType: qs.sourceType,
+                label: qs.label,
+                encryptedCredential: qs.encryptedCredential ?? '',
+                credentialHint: qs.credentialHint ?? '',
+                curlRaw: qs.curlRaw ?? undefined,
+                baseUrl: qs.baseUrl ?? undefined,
+                config: qs.config ?? {},
+                enabled: qs.enabled ?? true,
+                sortOrder: qs.sortOrder ?? Date.now(),
+                createdAt: qs.createdAt ?? Date.now(),
+                updatedAt: qs.updatedAt ?? Date.now(),
+              })
 	            } catch {
 	              // Skip sources that fail to import
 	            }

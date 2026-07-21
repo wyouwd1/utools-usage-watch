@@ -54,6 +54,7 @@ export interface IQuotaSourceEntity {
   sortOrder: number
   createdAt: number
   updatedAt: number
+  curlRaw?: string                 // Raw cURL command for re-editing
   credentialExpiredAt?: number     // Timestamp when cookie was detected as expired
   lastCheckSucceeded?: boolean     // Whether the last quota check succeeded
   lastError?: string               // Last error message from quota check

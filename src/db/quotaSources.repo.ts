@@ -33,6 +33,7 @@ export async function add(
     label: data.label,
     encryptedCredential,
     credentialHint,
+    curlRaw: data.curlRaw ?? undefined,
     baseUrl: data.baseUrl ?? undefined,
     config: data.config ?? undefined,
     enabled: data.enabled ?? true,

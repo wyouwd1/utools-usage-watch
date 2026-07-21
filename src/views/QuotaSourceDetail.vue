@@ -154,6 +154,7 @@ function fillForm(es: NonNullable<typeof existingSource.value>) {
   baseUrl.value = es.baseUrl ?? ''
   enabled.value = es.enabled
   configValues.value = es.config ? { ...es.config } : {}
+  curlCommand.value = es.curlRaw ?? ''
   manualMode.value = false
 }
 
@@ -195,12 +196,18 @@ function applyCurlResult(): void {
     if (cfg) label.value = cfg.label
   }
   
-  // Fill credential from cookies
+  // Fill credential — depends on source type:
+  // OpenCode Go: extract just the 'auth' cookie value
+  // Bailian: use the full cookie string
   const cookieEntries = Object.entries(r.cookies)
   if (cookieEntries.length > 0) {
-    credential.value = Object.entries(r.headers)
-      .find(([k]) => k.toLowerCase() === 'cookie')?.[1] 
-      ?? cookieEntries.map(([k, v]) => `${k}=${v}`).join('; ')
+    if (sourceType.value === QuotaSourceType.OPENCODE_GO) {
+      credential.value = r.cookies['auth'] ?? r.cookies['session'] ?? ''
+    } else {
+      credential.value = Object.entries(r.headers)
+        .find(([k]) => k.toLowerCase() === 'cookie')?.[1] 
+        ?? cookieEntries.map(([k, v]) => `${k}=${v}`).join('; ')
+    }
   }
   
   // Fill workspaceId
@@ -215,7 +222,7 @@ function applyCurlResult(): void {
   
   showPreview.value = false
   parsedResult.value = null
-  curlCommand.value = ''
+  // Keep curlCommand.value so it can be saved as curlRaw
   showCurlInput.value = false
 }
 
@@ -226,6 +233,11 @@ function cancelPreview(): void {
 
 function getCredentialFromResult(): string {
   if (!parsedResult.value) return ''
+  // For OpenCode Go, extract the 'auth' cookie value
+  if (sourceType.value === QuotaSourceType.OPENCODE_GO) {
+    return parsedResult.value.cookies['auth'] ?? parsedResult.value.cookies['session'] ?? ''
+  }
+  // For others (Bailian), use the full cookie header value
   const cookieHeader = Object.entries(parsedResult.value.headers)
     .find(([k]) => k.toLowerCase() === 'cookie')
   if (cookieHeader) return cookieHeader[1]
@@ -278,6 +290,7 @@ async function handleSave() {
       const result = await quotaSourcesStore.addSource({
         ...commonData,
         credential: credential.value.trim(),
+        curlRaw: curlCommand.value.trim() || undefined,
         sortOrder: Date.now(),
       })
 
@@ -296,6 +309,11 @@ async function handleSave() {
         credential.value.trim() !== existingSource.value?.credentialHint
       ) {
         updateData.credential = credential.value.trim()
+      }
+
+      // Always update curlRaw if the user changed it
+      if (curlCommand.value.trim()) {
+        updateData.curlRaw = curlCommand.value.trim()
       }
 
       const result = await quotaSourcesStore.updateSource(id.value, updateData)
