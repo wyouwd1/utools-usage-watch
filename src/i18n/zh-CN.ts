@@ -85,6 +85,21 @@ export default {
     noData: '暂无额度数据，请先刷新',
     trend: '使用趋势',
   },
+  quotaSources: {
+    title: '额度源管理',
+    addSource: '添加额度源',
+    editSource: '编辑额度源',
+    sourceType: '额度源类型',
+    label: '标签',
+    credential: '凭证',
+    baseUrl: 'Base URL',
+    enabled: '启用',
+    keepExistingCredential: '留空以保留现有凭证',
+    placeholder: {
+      label: '例如：我的百炼账号',
+      credential: '输入凭证',
+    },
+  },
   settings: {
     title: '设置',
     language: '语言',

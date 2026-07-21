@@ -85,6 +85,21 @@ export default {
     noData: 'No quota data yet. Please refresh.',
     trend: 'Usage Trend',
   },
+  quotaSources: {
+    title: 'Quota Sources',
+    addSource: 'Add Quota Source',
+    editSource: 'Edit Quota Source',
+    sourceType: 'Source Type',
+    label: 'Label',
+    credential: 'Credential',
+    baseUrl: 'Base URL',
+    enabled: 'Enabled',
+    keepExistingCredential: 'Leave empty to keep the existing credential',
+    placeholder: {
+      label: 'e.g. My Bailian Account',
+      credential: 'Enter credential',
+    },
+  },
   settings: {
     title: 'Settings',
     language: 'Language',

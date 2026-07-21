@@ -31,6 +31,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/QuotaDetail.vue'),
       },
       {
+        path: 'quota-source/:id',
+        name: 'QuotaSourceDetail',
+        component: () => import('@/views/QuotaSourceDetail.vue'),
+      },
+      {
         path: 'settings',
         name: 'Settings',
         component: () => import('@/views/Settings.vue'),
