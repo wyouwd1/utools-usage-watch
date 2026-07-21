@@ -42,8 +42,7 @@ const isActive = (path: string) => route.path === path
     <!-- 侧边导航 -->
     <aside class="w-56 bg-white border-r border-gray-200 flex flex-col">
       <div class="p-4 border-b border-gray-100">
-        <h1 class="text-lg font-bold text-gray-800">AI Usage Watch</h1>
-        <p class="text-xs text-gray-400 mt-0.5">{{ t('app.subtitle') }}</p>
+        <h1 class="text-base font-bold text-gray-800 truncate">AI Usage Watch <span class="text-xs font-normal text-gray-400">— {{ t('app.subtitle') }}</span></h1>
       </div>
 
       <nav class="flex-1 p-3 space-y-1">
