@@ -171,19 +171,36 @@ export class OpenCodeAdapter implements IQuotaSourceAdapter {
     const baseUrl = config?.baseUrl ?? this.defaultBaseUrl
     const wsId = config?.workspaceId ?? 'wrk_xxxxxxxxxxxxxxxxxxxxxxxxxxxx'
     try {
-      const cookie = `oc_locale=zh; auth=${encodeURIComponent(credential)}`
+      // Build cookie as the real page does — no encodeURIComponent,
+      // the auth token is already in cookie-safe format from the cURL
+      const cookie = `oc_locale=zh; auth=${credential}`
       const res = await fetch(`${baseUrl}/workspace/${wsId}/go`, {
         headers: {
-          accept: 'text/html',
+          accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+          'accept-language': 'zh-CN,zh;q=0.9',
+          'cache-control': 'no-cache',
           cookie,
-          'user-agent': 'utools-usage-watch/1.0',
+          pragma: 'no-cache',
+          priority: 'u=0, i',
+          'sec-fetch-dest': 'document',
+          'sec-fetch-mode': 'navigate',
+          'sec-fetch-site': 'same-origin',
+          'sec-fetch-user': '?1',
+          'upgrade-insecure-requests': '1',
+          'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36',
         },
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(10000),
+        redirect: 'follow',
       })
-      if (!res.ok) return null
+      if (!res.ok) {
+        console.warn(`[OpenCodeAdapter] HTTP ${res.status} for workspace ${wsId}`)
+        return null
+      }
       const html = await res.text()
+      console.log(`[OpenCodeAdapter] Received ${html.length} bytes, parsing...`)
       return extractQuota(html)
-    } catch {
+    } catch (err) {
+      console.warn('[OpenCodeAdapter] checkQuota error:', (err as Error).message)
       return null
     }
   }
