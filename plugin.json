@@ -1,0 +1,22 @@
+{
+  "manifest_version": 1,
+  "name": "AI Usage Watch",
+  "version": "1.0.0",
+  "description": "AI 模型 API Key 管理与额度监控 / AI API Key Manager & Quota Watcher",
+  "author": "wyouwd1",
+  "homepage": "https://github.com/wyouwd1/utools-usage-watch",
+  "logo": "logo.png",
+  "main": "index.html",
+  "preload": "preload.js",
+  "pluginSetting": {
+    "single": true,
+    "height": 600
+  },
+  "features": [
+    {
+      "code": "aw",
+      "explain": "打开 AI 额度监控 / Open AI Quota Watcher",
+      "cmds": ["aw", "aw quota", "aw keys", "aw settings"]
+    }
+  ]
+}
