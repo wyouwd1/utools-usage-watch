@@ -44,7 +44,6 @@ if (isH5Dev) {
     }
     return originalFetch(input, init)
   }
-  console.log('[fetch] H5 dev mode: global fetch monkey-patched for CORS proxy')
 }
 
 export { isH5Dev }

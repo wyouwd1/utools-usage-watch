@@ -197,7 +197,6 @@ export class OpenCodeAdapter implements IQuotaSourceAdapter {
         return null
       }
       const html = await res.text()
-      console.log(`[OpenCodeAdapter] Received ${html.length} bytes, parsing...`)
       return extractQuota(html)
     } catch (err) {
       console.warn('[OpenCodeAdapter] checkQuota error:', (err as Error).message)

@@ -73,7 +73,7 @@ class AutoRefreshScheduler {
         this.failureCount.set(sourceId, count)
 
         if (count >= this.MAX_FAILURES) {
-          console.log(`[AutoRefresh] Disabling ${source.label} after ${count} consecutive failures`)
+          console.warn(`[AutoRefresh] Disabling ${source.label} after ${count} consecutive failures`)
           await sourcesStore.updateSource(sourceId, { enabled: false })
           this.failureCount.delete(sourceId)
         }
